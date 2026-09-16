@@ -64,7 +64,7 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const PORT = 5502;
 const BASE_URL = `http://localhost:${PORT}`;
-const TEST_STAFF_NAME = '當眞 優希'; // ログインを紐付けるスタッフ(seed投入済みの前提)
+const TEST_STAFF_NAME = 'スタイリスト'; // ログインを紐付けるスタッフ(seed投入済みの前提。2026-09-16に実名から変更)
 const TEST_EMAIL = 'temp-e2e-admin@citydogs.invalid';
 const TEST_PASSWORD = 'TempTest12345!';
 

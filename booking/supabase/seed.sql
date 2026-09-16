@@ -16,9 +16,12 @@
 
 -- ---- スタッフ ------------------------------------------------
 -- 名前を自然キー代わりにした再実行安全なinsert(重複防止)。
+-- 🏪 店舗固有: 実在のスタッフの実名を避け、汎用的な「スタイリスト」を仮の名前にしている
+-- (2026-09-16、公開URLに実名が出ることを避けるためユーザー判断で変更)。
+-- 新しい店舗向けに複製する場合はここに実際のスタッフ名を入れる。
 insert into staff (name, role, is_active, display_order)
-select '當眞 優希', 'stylist', true, 1
-where not exists (select 1 from staff where name = '當眞 優希');
+select 'スタイリスト', 'stylist', true, 1
+where not exists (select 1 from staff where name = 'スタイリスト');
 
 -- アシスタントは今のところ顧客が指名予約できる対象ではないため、
 -- staff_shiftsは登録しない(= computeAvailabilityの対象から自然に外れる)。
@@ -76,11 +79,11 @@ select
 from flagged
 on conflict (date) do nothing;
 
--- ---- スタッフシフト(當眞さんは営業日フルタイム稼働という仮定) --------------
+-- ---- スタッフシフト(スタイリストは営業日フルタイム稼働という仮定) --------------
 insert into staff_shifts (staff_id, date, is_working, start_time, end_time)
 select s.id, bd.date, true, bd.open_time, bd.close_time
 from business_days bd
-join staff s on s.name = '當眞 優希'
+join staff s on s.name = 'スタイリスト'
 where bd.is_open
   and not exists (
     select 1 from staff_shifts ss where ss.staff_id = s.id and ss.date = bd.date
@@ -88,10 +91,9 @@ where bd.is_open
 
 -- ---- スタッフのLP紹介文(現行LPのハードコード内容をそのまま初期値にする) --------
 update staff set
-  name_en = 'Yuki Toma',
   bio_role_label = 'スタイリスト / 理容歴4年',
   bio_comment = '「フェードでピシッと!!!!」<br>お客様一人ひとりの骨格や毛質に合わせたフェードスタイルをご提案します。'
-where name = '當眞 優希' and bio_comment is null;
+where name = 'スタイリスト' and bio_comment is null;
 
 update staff set
   bio_role_label = 'アシスタント',

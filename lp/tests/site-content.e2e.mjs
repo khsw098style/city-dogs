@@ -96,7 +96,7 @@ async function run() {
     const staffCount = await page.locator('#staffGrid .staff-card').count();
     if (staffCount !== 2) failures.push(`STAFF: 期待したスタッフ数(2)と異なる: ${staffCount}`);
     const staffNameText = await page.locator('#staffGrid .staff-name').first().textContent();
-    if (!staffNameText.includes('當眞')) failures.push(`STAFF: 先頭スタッフの氏名が想定と異なる: ${staffNameText}`);
+    if (!staffNameText.includes('スタイリスト')) failures.push(`STAFF: 先頭スタッフの氏名が想定と異なる: ${staffNameText}`);
     const staffRoleText = await page.locator('#staffGrid .staff-role').first().textContent();
     if (!staffRoleText.includes('理容歴4年')) failures.push(`STAFF: 肩書き(bio_role_label)が反映されていない: ${staffRoleText}`);
 
