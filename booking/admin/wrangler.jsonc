@@ -1,0 +1,9 @@
+{
+  // Cloudflare Workers(静的アセット配信)の設定。ビルド不要な素のHTML/CSS/JSサイトを
+  // そのまま配信するだけなので、Workerスクリプトは持たず assets のみを指定する。
+  "name": "city-dogs-admin",
+  "compatibility_date": "2025-01-01",
+  "assets": {
+    "directory": "."
+  }
+}
