@@ -1,0 +1,18 @@
+{
+  "name": "city-dogs-booking",
+  "version": "0.1.0",
+  "private": true,
+  "description": "City Dogs 予約管理システム — Supabase CLI(devDependency)経由で操作する",
+  "scripts": {
+    "supabase": "supabase",
+    "link": "supabase link",
+    "db:push": "supabase db push",
+    "functions:deploy": "supabase functions deploy --use-api",
+    "check": "deno check --config supabase/functions/deno.json supabase/functions/menus/index.ts supabase/functions/staff/index.ts supabase/functions/availability/index.ts supabase/functions/reservations/index.ts supabase/functions/admin-reservations/index.ts supabase/functions/site-content/index.ts supabase/functions/admin-site-content/index.ts supabase/functions/admin-menus/index.ts supabase/functions/google-rating/index.ts supabase/functions/admin-business-days/index.ts supabase/functions/admin-staff-shifts/index.ts supabase/functions/admin-customers/index.ts",
+    "lint": "deno lint --config supabase/functions/deno.json supabase/functions",
+    "test": "deno test --config supabase/functions/deno.json supabase/functions/_shared"
+  },
+  "devDependencies": {
+    "supabase": "^2.117.0"
+  }
+}

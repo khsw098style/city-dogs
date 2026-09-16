@@ -1,0 +1,61 @@
+/* ===========================================================
+   City Dogs — 予約確認・変更ページ(manage.html)
+   styles.css / reserve.css のトークン・コンポーネントを流用する
+   =========================================================== */
+
+.manage-card {
+  padding: 0.5rem 0;
+}
+
+.manage-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.4rem;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+}
+.status-pill.is-active { background: rgba(31,101,82,0.12); color: var(--gold); }
+.status-pill.is-done { background: rgba(31,101,82,0.12); color: var(--gold); }
+.status-pill.is-cancelled { background: rgba(178,58,42,0.1); color: #963a29; }
+.status-pill.is-muted { background: rgba(92,106,98,0.12); color: var(--muted); }
+
+.manage-details {
+  background: var(--bg-alt);
+  border: 1px solid var(--surface-line);
+  border-radius: 6px;
+  padding: 1.2rem 1.4rem;
+  margin-bottom: 1.6rem;
+}
+.manage-details dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.6rem 1rem;
+  font-size: 0.9rem;
+}
+.manage-details dt { color: var(--muted); }
+.manage-details dd { margin: 0; color: var(--cream); }
+
+.manage-note {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0 0 1.6rem;
+}
+
+.cancel-confirm {
+  background: rgba(178,58,42,0.06);
+  border: 1px solid rgba(178,58,42,0.3);
+  border-radius: 6px;
+  padding: 1.2rem 1.4rem;
+  margin-top: 1.2rem;
+}
+.cancel-confirm p { margin: 0 0 1rem; font-size: 0.9rem; }
+.cancel-confirm .wizard-actions { border-top: none; margin-top: 0; padding-top: 0; }

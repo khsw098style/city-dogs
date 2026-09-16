@@ -1,0 +1,352 @@
+/* ===========================================================
+   City Dogs — WEB予約ウィザード
+   styles.css のトークン/コンポーネントを前提に追加分のみ定義する
+   =========================================================== */
+
+.reserve-main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 7.5rem 1.5rem 6rem;
+}
+
+.reserve-head {
+  text-align: center;
+  margin-bottom: 2.4rem;
+}
+.reserve-head .kicker {
+  font-family: var(--font-accent);
+  letter-spacing: 0.3em;
+  font-size: 0.75rem;
+  color: var(--gold);
+  margin: 0 0 0.6rem;
+}
+.reserve-title {
+  font-family: var(--font-serif);
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
+  margin: 0 0 0.6rem;
+  color: var(--cream);
+}
+.reserve-lead {
+  color: var(--muted);
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+/* ---------- Progress ---------- */
+.wizard-progress {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0;
+  list-style: none;
+  margin: 0 0 2.4rem;
+  padding: 0;
+}
+.wizard-progress li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.wizard-progress li:not(:last-child)::after {
+  content: "";
+  width: 2.2rem;
+  height: 1px;
+  background: var(--surface-line);
+  margin: 0 0.7rem;
+}
+.wizard-progress-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--surface-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-accent);
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+.wizard-progress li.is-current .wizard-progress-num {
+  border-color: var(--gold);
+  color: var(--gold-light);
+}
+.wizard-progress li.is-current .wizard-progress-label { color: var(--cream); }
+.wizard-progress li.is-done .wizard-progress-num {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #1a1310;
+}
+.wizard-progress li.is-done .wizard-progress-label { color: var(--muted); }
+
+/* ---------- Wizard shell ---------- */
+.wizard-step {
+  background: var(--surface);
+  border: 1px solid var(--surface-line);
+  border-radius: 8px;
+  padding: 2rem 1.8rem;
+}
+.wizard-step-title {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  margin: 0 0 1.4rem;
+  color: var(--cream);
+}
+.wizard-status {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0;
+  padding: 1rem 0;
+}
+.wizard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: 1.8rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--surface-line);
+}
+.wizard-actions .btn { white-space: normal; text-align: center; }
+.wizard-actions .btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ---------- Step 1: menu options ---------- */
+.option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.option-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-alt);
+  border: 1px solid var(--surface-line);
+  border-radius: 6px;
+  padding: 1rem 1.2rem;
+  color: var(--cream);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.option-card:hover { border-color: var(--gold); }
+.option-card.is-selected {
+  border-color: var(--gold);
+  background: rgba(31,101,82,0.08);
+}
+.option-card-main h3 {
+  margin: 0 0 0.3rem;
+  font-family: var(--font-serif);
+  font-size: 1rem;
+}
+.option-card-main p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.option-card-meta {
+  text-align: right;
+  flex-shrink: 0;
+}
+.option-card-price {
+  font-family: var(--font-accent);
+  color: var(--gold-light);
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+.option-card-duration {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-faint, var(--muted));
+  margin-top: 0.15rem;
+}
+
+/* ---------- Step 2: date + slots ---------- */
+.field { margin-bottom: 1.4rem; }
+.field label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+.field .required {
+  color: var(--gold);
+  font-size: 0.72rem;
+  border: 1px solid rgba(31,101,82,0.4);
+  border-radius: 3px;
+  padding: 0.05rem 0.4rem;
+  margin-left: 0.3rem;
+}
+.field-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.date-input,
+.select-input,
+input[type="text"],
+input[type="tel"],
+textarea {
+  width: 100%;
+  background: var(--bg-alt);
+  border: 1px solid var(--surface-line);
+  border-radius: 6px;
+  padding: 0.85em 1em;
+  color: var(--cream);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+}
+.date-input:focus,
+.select-input:focus,
+input[type="text"]:focus,
+input[type="tel"]:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+textarea { resize: vertical; }
+.select-input { color-scheme: light; }
+
+.date-input {
+  color-scheme: light;
+}
+
+.slot-area {
+  min-height: 3rem;
+}
+.slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 0.6rem;
+}
+.slot-btn {
+  background: var(--bg-alt);
+  border: 1px solid var(--surface-line);
+  border-radius: 6px;
+  padding: 0.7em 0.5em;
+  color: var(--cream);
+  font-family: var(--font-accent);
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.slot-btn:hover { border-color: var(--gold); }
+.slot-btn.is-selected {
+  border-color: var(--gold);
+  background: linear-gradient(135deg, var(--gold-light), var(--gold));
+  color: #1a1310;
+  font-weight: 600;
+}
+
+/* ---------- Step 3: summary + form ---------- */
+.summary-box {
+  background: var(--bg-alt);
+  border: 1px solid var(--surface-line);
+  border-radius: 6px;
+  padding: 1.2rem 1.4rem;
+  margin-bottom: 1.8rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.summary-box dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.4rem 1rem;
+}
+.summary-box dt { color: var(--text-faint, var(--muted)); }
+.summary-box dd { margin: 0; color: var(--cream); }
+.summary-box .summary-price {
+  font-family: var(--font-accent);
+  color: var(--gold-light);
+}
+
+.form-error {
+  background: rgba(178,58,42,0.08);
+  border: 1px solid rgba(178,58,42,0.35);
+  color: #963a29;
+  border-radius: 6px;
+  padding: 0.8em 1em;
+  font-size: 0.85rem;
+  margin: 0 0 0.5rem;
+}
+
+/* ---------- Result ---------- */
+.result-card {
+  text-align: center;
+  padding: 1rem 0.5rem;
+}
+.result-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  margin: 0 auto 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.result-icon.is-success { background: rgba(31,101,82,0.12); color: var(--gold); }
+.result-icon.is-error { background: rgba(178,58,42,0.12); color: #963a29; }
+
+.result-card h2 {
+  font-family: var(--font-serif);
+  font-size: 1.35rem;
+  margin: 0 0 0.6rem;
+  color: var(--cream);
+}
+.result-card > p {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 1.6rem;
+}
+
+.result-number {
+  font-family: var(--font-accent);
+  font-size: 1.6rem;
+  letter-spacing: 0.05em;
+  color: var(--gold-light);
+  margin: 0 0 1.4rem;
+}
+
+.result-details {
+  text-align: left;
+  background: var(--bg-alt);
+  border: 1px solid var(--surface-line);
+  border-radius: 6px;
+  padding: 1.2rem 1.4rem;
+  margin: 0 0 1.8rem;
+  font-size: 0.9rem;
+}
+.result-details dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem 1rem;
+}
+.result-details dt { color: var(--muted); }
+.result-details dd { margin: 0; color: var(--cream); }
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+}
+
+@media (max-width: 560px) {
+  .reserve-main { padding-top: 6.5rem; }
+  .wizard-step { padding: 1.5rem 1.2rem; }
+  .wizard-progress-label { display: none; }
+  .wizard-progress li:not(:last-child)::after { width: 1.2rem; margin: 0 0.4rem; }
+}

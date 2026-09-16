@@ -1,0 +1,8 @@
+node_modules/
+.env
+.env.local
+.DS_Store
+Thumbs.db
+
+# 仕様把握用の内部参考資料(現行HotPepper/SALON BOARDのスクリーンショット)。公開リポジトリには含めない。
+booking/reference/

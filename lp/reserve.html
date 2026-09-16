@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ja">
+<!-- 🏪 店舗固有: title・店舗名・footer等、店舗情報がハードコードされている箇所を含む。
+     新しい店舗向けに複製する場合はこのファイル全体を確認して書き換えること。
+     手順は最上位の TEMPLATE.md を参照。 -->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WEB予約 | BARBER City Dogs(シティードッグス)</title>
+<meta name="description" content="City Dogsのご予約はこちらから。メニュー・日時を選んでその場で予約完了。">
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/reserve.css">
+</head>
+<body>
+
+<div class="noise-overlay"></div>
+
+<header class="site-header" id="siteHeader">
+  <div class="header-inner">
+    <a href="index.html" class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <img src="images/logo-mark.png" alt="" loading="eager">
+      </span>
+      <span class="brand-text">
+        <span class="brand-name">City Dogs</span>
+        <span class="brand-sub">BARBER SHOP</span>
+      </span>
+    </a>
+
+    <nav class="main-nav" id="mainNav">
+      <a href="index.html#menu">メニュー</a>
+      <a href="index.html#access">アクセス</a>
+    </nav>
+
+    <div class="header-cta">
+      <a href="tel:098XXXXXXX" class="btn btn-ghost btn-small">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1l-2.3 2.2z"/></svg>
+        電話で予約
+      </a>
+    </div>
+
+    <button class="nav-toggle" id="navToggle" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="reserve-main">
+
+  <div class="reserve-head">
+    <p class="kicker">WEB RESERVATION</p>
+    <h1 class="reserve-title">ご予約</h1>
+    <p class="reserve-lead">メニューと日時を選んで、その場で予約が完了します。</p>
+  </div>
+
+  <ol class="wizard-progress" id="wizardProgress" aria-label="予約の手順">
+    <li data-step="1" class="is-current"><span class="wizard-progress-num">1</span><span class="wizard-progress-label">メニュー</span></li>
+    <li data-step="2"><span class="wizard-progress-num">2</span><span class="wizard-progress-label">日時</span></li>
+    <li data-step="3"><span class="wizard-progress-num">3</span><span class="wizard-progress-label">お客様情報</span></li>
+  </ol>
+
+  <div class="wizard">
+
+    <!-- STEP 1: メニュー -->
+    <section class="wizard-step is-active" data-step="1" id="stepMenu">
+      <h2 class="wizard-step-title">メニューを選ぶ</h2>
+      <div id="menuList" class="option-list" aria-live="polite">
+        <p class="wizard-status">メニューを読み込んでいます…</p>
+      </div>
+      <div class="wizard-actions">
+        <span></span>
+        <button type="button" class="btn btn-primary" id="toStep2" disabled>次へ(日時を選ぶ)</button>
+      </div>
+    </section>
+
+    <!-- STEP 2: 日時 -->
+    <section class="wizard-step" data-step="2" id="stepDatetime" hidden>
+      <h2 class="wizard-step-title">日時を選ぶ</h2>
+
+      <div class="field">
+        <label for="staffSelect">担当スタイリスト</label>
+        <select id="staffSelect" class="select-input">
+          <option value="">指名なし(おまかせ)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="dateInput">来店希望日</label>
+        <input type="date" id="dateInput" class="date-input">
+      </div>
+
+      <div id="slotArea" class="slot-area" aria-live="polite">
+        <p class="wizard-status">来店希望日を選んでください。</p>
+      </div>
+
+      <div class="wizard-actions">
+        <button type="button" class="btn btn-ghost" data-back="1">戻る</button>
+        <button type="button" class="btn btn-primary" id="toStep3" disabled>次へ(お客様情報)</button>
+      </div>
+    </section>
+
+    <!-- STEP 3: お客様情報 -->
+    <section class="wizard-step" data-step="3" id="stepDetails" hidden>
+      <h2 class="wizard-step-title">お客様情報を入力</h2>
+
+      <div class="summary-box" id="summaryBox"></div>
+
+      <form id="reserveForm" novalidate>
+        <div class="field">
+          <label for="nameInput">お名前 <span class="required">必須</span></label>
+          <input type="text" id="nameInput" name="name" autocomplete="name" placeholder="例: 山田 太郎" required>
+        </div>
+        <div class="field">
+          <label for="phoneInput">電話番号 <span class="required">必須</span></label>
+          <input type="tel" id="phoneInput" name="phone" autocomplete="tel" placeholder="例: 090-1234-5678" required>
+          <p class="field-hint">確認・変更のご連絡に使用します。携帯電話番号でご入力ください。</p>
+        </div>
+        <div class="field">
+          <label for="emailInput">メールアドレス <span class="required">必須</span></label>
+          <input type="email" id="emailInput" name="email" autocomplete="email" placeholder="例: taro@example.com" required>
+          <p class="field-hint">予約の確認・変更・キャンセル用リンクをお送りします。</p>
+        </div>
+        <div class="field">
+          <label for="notesInput">ご要望(任意)</label>
+          <textarea id="notesInput" name="notes" rows="3" placeholder="髪型のご希望などあればご記入ください"></textarea>
+        </div>
+
+        <p class="form-error" id="formError" hidden></p>
+
+        <div class="wizard-actions">
+          <button type="button" class="btn btn-ghost" data-back="2">戻る</button>
+          <button type="submit" class="btn btn-primary" id="submitBtn">予約を確定する</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- RESULT -->
+    <section class="wizard-step" data-step="result" id="stepResult" hidden>
+      <div id="resultArea"></div>
+    </section>
+
+  </div>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <span class="brand-mark small" aria-hidden="true"><img src="images/logo-mark.png" alt="" loading="lazy"></span>
+      City Dogs
+    </div>
+    <div class="sns-links footer-sns">
+      <a href="https://www.instagram.com/citydogs928/" target="_blank" rel="noopener" class="sns-link" aria-label="Instagramを見る(@citydogs928)">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2.2c2.7 0 3 0 4.1.06 1.1.05 1.8.22 2.4.46.7.27 1.2.6 1.7 1.1.5.5.9 1 1.1 1.7.24.6.4 1.3.46 2.4.06 1.1.06 1.4.06 4.1s0 3-.06 4.1c-.05 1.1-.22 1.8-.46 2.4-.27.7-.6 1.2-1.1 1.7-.5.5-1 .9-1.7 1.1-.6.24-1.3.4-2.4.46-1.1.06-1.4.06-4.1.06s-3 0-4.1-.06c-1.1-.05-1.8-.22-2.4-.46-.7-.27-1.2-.6-1.7-1.1-.5-.5-.9-1-1.1-1.7-.24-.6-.4-1.3-.46-2.4C2.2 15 2.2 14.7 2.2 12s0-3 .06-4.1c.05-1.1.22-1.8.46-2.4.27-.7.6-1.2 1.1-1.7.5-.5 1-.9 1.7-1.1.6-.24 1.3-.4 2.4-.46C9 2.2 9.3 2.2 12 2.2zm0 1.8c-2.66 0-2.97 0-4.02.06-.9.04-1.4.19-1.72.32-.43.17-.74.37-1.07.7-.33.33-.53.64-.7 1.07-.13.32-.28.82-.32 1.72C4.11 9.03 4.1 9.34 4.1 12s0 2.97.06 4.02c.04.9.19 1.4.32 1.72.17.43.37.74.7 1.07.33.33.64.53 1.07.7.32.13.82.28 1.72.32 1.05.05 1.36.06 4.02.06s2.97 0 4.02-.06c.9-.04 1.4-.19 1.72-.32.43-.17.74-.37 1.07-.7.33-.33.53-.64.7-1.07.13-.32.28-.82.32-1.72.05-1.05.06-1.36.06-4.02s0-2.97-.06-4.02c-.04-.9-.19-1.4-.32-1.72-.17-.43-.37-.74-.7-1.07-.33-.33-.64-.53-1.07-.7-.32-.13-.82-.28-1.72-.32C14.97 4.01 14.66 4 12 4zm0 3.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 1.8a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4zm4.7-2a1.05 1.05 0 1 1 0 2.1 1.05 1.05 0 0 1 0-2.1z"/></svg>
+      </a>
+      <a href="#" class="sns-link" aria-label="LINEで相談する(準備中)">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.06.75.2.86.46.1.24.06.6.03.86l-.14.85c-.04.24-.2.95.83.52 1.04-.44 5.6-3.3 7.64-5.65C20.9 14.2 22 12.7 22 11c0-4.4-4.5-8-10-8zm-3.3 5.9v3.6c0 .1-.08.18-.18.18h-.6c-.1 0-.18-.08-.18-.18V8.9c0-.1.08-.18.18-.18h.6c.1 0 .18.08.18.18zm1.1 0c0-.1.08-.18.18-.18h.6c.1 0 .18.08.18.18v3.6c0 .1-.08.18-.18.18h-.6c-.1 0-.18-.08-.18-.18zm2.68-.18h1.88c.1 0 .18.08.18.18v.5c0 .1-.08.18-.18.18h-1.1v.66h1.1c.1 0 .18.08.18.18v.5c0 .1-.08.18-.18.18h-1.1v.66h1.1c.1 0 .18.08.18.18v.5c0 .1-.08.18-.18.18h-1.88c-.1 0-.18-.08-.18-.18V8.9c0-.1.08-.18.18-.18zm-6.6 0c.1 0 .18.08.18.18v2.92h1.1c.1 0 .18.08.18.18v.5c0 .1-.08.18-.18.18H5.7c-.1 0-.18-.08-.18-.18V8.9c0-.1.08-.18.18-.18z"/></svg>
+      </a>
+    </div>
+    <p>〒901-2114 沖縄県浦添市仲間3-1-2</p>
+    <p class="footer-copy">&copy; <span id="year"></span> BARBER City Dogs</p>
+  </div>
+</footer>
+
+<button type="button" class="fab-call" id="fabCall" aria-label="電話で予約する">
+  <a href="tel:098XXXXXXX">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1l-2.3 2.2z"/></svg>
+    電話で予約
+  </a>
+</button>
+
+<script src="js/config.js"></script>
+<script src="js/script.js"></script>
+<script src="js/reserve.js"></script>
+</body>
+</html>

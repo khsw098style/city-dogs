@@ -1,0 +1,550 @@
+/* ===========================================================
+   City Dogs 予約管理 — スタッフ向け内部ツール
+   顧客向けLP(White × Green)とトークン設計を揃えている。
+   データ密度を優先したユーティリタリアンなレイアウトにする。
+   =========================================================== */
+
+:root {
+  --bg: #f8f7f2;
+  --surface: #ffffff;
+  --surface-2: #eef3ee;
+  --border: rgba(31,101,82,0.16);
+  --border-strong: rgba(31,101,82,0.32);
+  --text: #17231d;
+  --muted: #5c6a62;
+  --faint: #8a978f;
+  --accent: #1f6552;
+  --accent-light: #2f9678;
+
+  /* ステータス用の意味色(ブランドのアクセント緑とは別軸で選定。
+     ただし「完了」だけはブランド色と概念が一致するため意図的にaccentを再利用) */
+  --st-progress: #4f7bab;
+  --st-progress-bg: rgba(79,123,171,0.14);
+  --st-active: #8a5fa8;
+  --st-active-bg: rgba(138,95,168,0.14);
+  --st-done: var(--accent);
+  --st-done-bg: rgba(31,101,82,0.12);
+  --st-muted: #8a8072;
+  --st-muted-bg: rgba(138,128,114,0.12);
+  --st-danger: #b3543f;
+  --st-danger-bg: rgba(179,84,63,0.12);
+
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+/* authorのdisplay指定(class等)がついた要素でも、hidden属性は必ず勝たせる。
+   同じ問題(reserve.jsの進捗バー)を再発させないための防御的ルール。 */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Zen Kaku Gothic New', sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, select, textarea { font-family: inherit; }
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  padding: 0.7em 1.4em;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  color: #f8f7f2;
+}
+.btn-primary:hover { transform: translateY(-1px); }
+.btn-ghost {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent-light); }
+.btn-small { padding: 0.5em 1em; font-size: 0.82rem; }
+
+/* ---------- Login ---------- */
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+.login-box {
+  width: 100%;
+  max-width: 360px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2.2rem 2rem;
+}
+.login-title {
+  font-size: 1.2rem;
+  font-weight: 900;
+  margin: 0 0 0.3rem;
+  text-align: center;
+}
+.login-sub {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin: 0 0 1.6rem;
+}
+
+.field { margin-bottom: 1.1rem; }
+.field label {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+.field input,
+input[type="text"], input[type="email"], input[type="password"], input[type="date"], select {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 0.7em 0.9em;
+  color: var(--text);
+  font-size: 0.92rem;
+  color-scheme: light;
+}
+.field input:focus,
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+
+.form-error {
+  background: var(--st-danger-bg);
+  border: 1px solid rgba(179,84,63,0.4);
+  color: #8a3c2b;
+  border-radius: 6px;
+  padding: 0.7em 0.9em;
+  font-size: 0.82rem;
+  margin: 0 0 1rem;
+}
+
+.login-box .btn { width: 100%; }
+
+/* ---------- App shell ---------- */
+.app-screen { min-height: 100vh; }
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.app-header-left { display: flex; align-items: center; gap: 0.7rem; }
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--accent);
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.app-title { font-weight: 900; font-size: 1rem; }
+.app-header-right { display: flex; align-items: center; gap: 1rem; }
+.staff-name { font-size: 0.85rem; color: var(--muted); }
+
+.tab-bar {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.8rem 1.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 0.6em 0.3em 0.8em;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tab-btn.is-active { color: var(--accent-light); border-bottom-color: var(--accent); }
+
+.app-main { max-width: 1100px; margin: 0 auto; padding: 1.6rem 1.5rem 4rem; }
+
+.tab-panel { display: none; }
+.tab-panel.is-active { display: block; }
+
+.status-text { color: var(--muted); font-size: 0.88rem; padding: 1.2rem 0; }
+
+/* ---------- Schedule ---------- */
+.date-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+.date-nav .date-input { max-width: 170px; }
+
+.business-day-info {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 1.2rem;
+}
+.business-day-info.is-closed { color: var(--st-danger); }
+
+.staff-column-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.staff-column {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.staff-column-head {
+  padding: 0.9rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.staff-column-head h3 { margin: 0; font-size: 0.95rem; }
+.staff-shift-time { font-size: 0.75rem; color: var(--faint); font-family: 'Oswald', sans-serif; }
+
+.staff-column-body { padding: 0.8rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.staff-column-empty { padding: 1rem; color: var(--faint); font-size: 0.82rem; text-align: center; }
+
+.reservation-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--st-progress);
+  border-radius: 6px;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.85rem;
+}
+.reservation-card.status-confirmed { border-left-color: var(--st-progress); }
+.reservation-card.status-tentative { border-left-color: var(--st-muted); }
+.reservation-card.status-in_service { border-left-color: var(--st-active); }
+.reservation-card.status-awaiting_checkout { border-left-color: var(--st-active); }
+.reservation-card.status-completed { border-left-color: var(--st-done); }
+.reservation-card.status-declined,
+.reservation-card.status-cancelled_by_customer,
+.reservation-card.status-cancelled_by_salon,
+.reservation-card.status-no_show,
+.reservation-card.status-auto_cancelled { border-left-color: var(--st-danger); opacity: 0.72; }
+
+.reservation-card-time {
+  font-family: 'Oswald', sans-serif;
+  color: var(--accent-light);
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+.reservation-card-customer { font-weight: 700; margin: 0.2rem 0; }
+.reservation-card-menu { color: var(--muted); font-size: 0.8rem; }
+.reservation-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-weight: 700;
+}
+.status-pill.is-progress { background: var(--st-progress-bg); color: var(--st-progress); }
+.status-pill.is-active { background: var(--st-active-bg); color: var(--st-active); }
+.status-pill.is-done { background: var(--st-done-bg); color: var(--st-done); }
+.status-pill.is-muted { background: var(--st-muted-bg); color: var(--st-muted); }
+.status-pill.is-danger { background: var(--st-danger-bg); color: var(--st-danger); }
+
+.source-tag {
+  font-family: 'Oswald', sans-serif;
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+  text-transform: uppercase;
+}
+
+.no-show-flag {
+  display: inline-block;
+  margin-left: 0.4rem;
+  font-size: 0.7rem;
+  color: var(--st-danger);
+}
+
+/* ---------- Search ---------- */
+.search-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.2rem;
+  margin-bottom: 1.2rem;
+}
+.search-field label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 0.35rem; }
+.search-submit { display: flex; align-items: flex-end; }
+.search-submit .btn { width: 100%; }
+
+.search-result-meta { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.8rem; }
+
+.search-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+table.search-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  background: var(--surface);
+}
+table.search-table th, table.search-table td {
+  padding: 0.7em 0.9em;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+table.search-table th {
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.75rem;
+  background: var(--surface-2);
+}
+table.search-table tr:last-child td { border-bottom: none; }
+
+/* ---------- LPコンテンツ ---------- */
+.content-note {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.9rem 1.1rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: 0 0 1.4rem;
+}
+/* サブナビの高さ分、見出しがナビの下に隠れないよう余白を確保する */
+.content-heading {
+  font-size: 0.95rem;
+  margin: 1.8rem 0 0.8rem;
+  scroll-margin-top: 3.6rem;
+}
+
+.content-subnav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  gap: 1.4rem;
+  background: var(--bg);
+  padding: 0.7rem 0.2rem;
+  margin: 0 0 0.4rem;
+  border-bottom: 1px solid var(--border);
+}
+.content-subnav a {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-decoration: none;
+  padding-bottom: 0.3rem;
+  border-bottom: 2px solid transparent;
+}
+.content-subnav a:hover { color: var(--accent-light); }
+.content-subnav a.is-current { color: var(--accent-light); border-bottom-color: var(--accent); }
+.content-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+.content-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+}
+.content-card .field { margin-bottom: 0.7rem; }
+.content-card .field:last-of-type { margin-bottom: 0.9rem; }
+.content-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+.content-card-actions .save-status { font-size: 0.78rem; color: var(--muted); }
+.content-card-actions .save-status.is-error { color: var(--st-danger); }
+.content-card-actions .save-status.is-ok { color: var(--st-done); }
+
+.content-add-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.9rem;
+  align-items: end;
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  padding: 1.1rem;
+}
+.content-add-form .field { margin-bottom: 0; }
+
+/* ---------- 営業日・シフトのカレンダー表示 ---------- */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 1.8rem;
+}
+.calendar-weekday {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--faint);
+  padding-bottom: 0.3rem;
+}
+.calendar-day-empty { visibility: hidden; }
+.calendar-day {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.5rem 0.6rem;
+  min-height: 62px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-family: inherit;
+  color: var(--text);
+  transition: border-color 0.15s ease;
+}
+.calendar-day:hover { border-color: var(--accent); }
+.calendar-day-num {
+  font-family: 'Oswald', sans-serif;
+  font-size: 0.85rem;
+  color: var(--faint);
+}
+.calendar-day-info {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--muted);
+  word-break: break-word;
+}
+.calendar-day.is-open .calendar-day-info { color: var(--accent-light); font-weight: 700; }
+.calendar-day.is-closed { background: var(--st-danger-bg); }
+.calendar-day.is-closed .calendar-day-info { color: var(--st-danger); }
+.calendar-day.is-unset { border-style: dashed; }
+.calendar-day.is-unset .calendar-day-info { color: var(--faint); }
+
+@media (max-width: 640px) {
+  .calendar-grid { gap: 2px; }
+  .calendar-day { min-height: 50px; padding: 0.35rem; font-size: 0.68rem; }
+}
+
+/* ---------- 顧客管理: 予約履歴の展開表示 ---------- */
+.customer-history {
+  margin-top: 0.8rem;
+  padding-top: 0.8rem;
+  border-top: 1px dashed var(--border-strong);
+  font-size: 0.8rem;
+}
+.customer-history table { width: 100%; border-collapse: collapse; }
+.customer-history th, .customer-history td {
+  padding: 0.35em 0.5em;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.customer-history th { color: var(--muted); font-weight: 700; font-size: 0.72rem; }
+
+/* ---------- 予約カードの操作導線 ---------- */
+.reservation-card-actions { margin-top: 0.5rem; text-align: right; }
+.reservation-card-actions .btn { padding: 0.35em 0.9em; font-size: 0.75rem; }
+.search-table td.col-actions { white-space: nowrap; }
+.search-table td.col-actions .btn { padding: 0.35em 0.9em; font-size: 0.75rem; }
+
+/* ---------- モーダル(代理予約登録・予約編集) ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(23, 35, 29, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 4vh 1rem;
+  overflow-y: auto;
+  z-index: 100;
+}
+.modal {
+  background: var(--surface);
+  border-radius: 10px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 12px 40px rgba(23, 35, 29, 0.25);
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.1rem 1.3rem;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h2 { margin: 0; font-size: 1rem; }
+.modal-close {
+  background: transparent;
+  border: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 1.3rem; }
+.modal-section { margin-top: 1.6rem; padding-top: 1.3rem; border-top: 1px solid var(--border); }
+.modal-section h3 { margin: 0 0 0.9rem; font-size: 0.88rem; color: var(--muted); }
+
+.detail-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.4rem 1rem;
+  font-size: 0.85rem;
+  margin: 0 0 0.2rem;
+}
+.detail-list dt { color: var(--muted); }
+.detail-list dd { margin: 0; font-weight: 700; }
+
+@media (max-width: 640px) {
+  .app-header { flex-direction: column; align-items: flex-start; gap: 0.6rem; }
+  .date-nav { flex-wrap: wrap; }
+  .modal-backdrop { padding: 0; align-items: stretch; }
+  .modal { max-width: none; border-radius: 0; min-height: 100%; }
+}

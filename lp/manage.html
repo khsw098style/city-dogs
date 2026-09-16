@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ja">
+<!-- 🏪 店舗固有: title・店舗名・footer等、店舗情報がハードコードされている箇所を含む。
+     新しい店舗向けに複製する場合はこのファイル全体を確認して書き換えること。
+     手順は最上位の TEMPLATE.md を参照。 -->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>予約の確認・変更 | BARBER City Dogs(シティードッグス)</title>
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/reserve.css">
+<link rel="stylesheet" href="css/manage.css">
+</head>
+<body>
+
+<div class="noise-overlay"></div>
+
+<header class="site-header" id="siteHeader">
+  <div class="header-inner">
+    <a href="index.html" class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <img src="images/logo-mark.png" alt="" loading="eager">
+      </span>
+      <span class="brand-text">
+        <span class="brand-name">City Dogs</span>
+        <span class="brand-sub">BARBER SHOP</span>
+      </span>
+    </a>
+
+    <nav class="main-nav" id="mainNav">
+      <a href="index.html#menu">メニュー</a>
+      <a href="index.html#access">アクセス</a>
+    </nav>
+
+    <div class="header-cta">
+      <a href="tel:098XXXXXXX" class="btn btn-ghost btn-small">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1l-2.3 2.2z"/></svg>
+        電話で予約
+      </a>
+    </div>
+
+    <button class="nav-toggle" id="navToggle" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="reserve-main">
+
+  <div class="reserve-head">
+    <p class="kicker">RESERVATION</p>
+    <h1 class="reserve-title">予約の確認・変更</h1>
+    <p class="reserve-lead">メールに記載されたリンクから、この予約の内容確認・キャンセルができます。</p>
+  </div>
+
+  <div id="manageArea" class="wizard-step is-active">
+    <p class="wizard-status">読み込んでいます…</p>
+  </div>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <span class="brand-mark small" aria-hidden="true"><img src="images/logo-mark.png" alt="" loading="lazy"></span>
+      City Dogs
+    </div>
+    <p>〒901-2114 沖縄県浦添市仲間3-1-2</p>
+    <p class="footer-copy">&copy; <span id="year"></span> BARBER City Dogs</p>
+  </div>
+</footer>
+
+<script src="js/config.js"></script>
+<script src="js/script.js"></script>
+<script src="js/manage.js"></script>
+</body>
+</html>

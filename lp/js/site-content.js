@@ -1,0 +1,176 @@
+(() => {
+  'use strict';
+
+  // Supabase Edge Functions(公開API)。publishable/anonキーはクライアントに埋め込む前提の鍵。
+  const { SUPABASE_URL, ANON_KEY } = window.CITY_DOGS_CONFIG;
+  const API_BASE = `${SUPABASE_URL}/functions/v1`;
+
+  const yenFmt = new Intl.NumberFormat('ja-JP');
+
+  const AVATAR_PLACEHOLDER_SVG =
+    '<svg viewBox="0 0 24 24" width="40" height="40"><path fill="currentColor" d="M12 12c2.7 0 8 1.3 8 4v2H4v-2c0-2.7 5.3-4 8-4zm0-2a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"/></svg>';
+
+  const el = {
+    featureGrid: document.getElementById('featureGrid'),
+    interiorPhoto: document.getElementById('interiorPhoto'),
+    styleGrid: document.getElementById('styleGrid'),
+    menuList: document.getElementById('menuList'),
+    staffGrid: document.getElementById('staffGrid'),
+    ratingScore: document.getElementById('ratingScore'),
+    ratingCount: document.getElementById('ratingCount'),
+  };
+
+  // Edge Functionのコールドスタート直後に稀に一時的な500が返ることがあるため、
+  // 1回だけ間隔を置いて再試行する(実機検証で確認済みの既知の挙動。数十回に1回程度で自然に解消する)。
+  async function apiGet(path, retriesLeft = 1) {
+    let res;
+    try {
+      res = await fetch(`${API_BASE}${path}`, {
+        headers: { Authorization: `Bearer ${ANON_KEY}` },
+      });
+    } catch (err) {
+      if (retriesLeft > 0) {
+        await new Promise((r) => setTimeout(r, 800));
+        return apiGet(path, retriesLeft - 1);
+      }
+      throw err;
+    }
+    if (!res.ok) {
+      if (retriesLeft > 0) {
+        await new Promise((r) => setTimeout(r, 800));
+        return apiGet(path, retriesLeft - 1);
+      }
+      throw new Error(`request failed: ${path}`);
+    }
+    return res.json();
+  }
+
+  function escapeHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+  }
+
+  function showLoadError(container, message) {
+    container.innerHTML = `<p class="menu-note">${escapeHtml(message)}</p>`;
+  }
+
+  function renderFeatures(features) {
+    if (!features || features.length === 0) {
+      el.featureGrid.innerHTML = '';
+      return;
+    }
+    el.featureGrid.innerHTML = features
+      .map((f, i) => `
+        <div class="feature-card reveal">
+          <span class="feature-num">${String(i + 1).padStart(2, '0')}</span>
+          <h3>${escapeHtml(f.title)}</h3>
+          <p>${escapeHtml(f.description)}</p>
+        </div>
+      `)
+      .join('');
+  }
+
+  function renderGallery(gallery) {
+    el.interiorPhoto.innerHTML = gallery.interior
+      ? `
+        <div class="interior-photo reveal">
+          <img src="${escapeHtml(gallery.interior.image_url)}" alt="${escapeHtml(gallery.interior.caption ?? '')}" loading="lazy">
+          <p class="photo-caption">${escapeHtml(gallery.interior.caption ?? '')}</p>
+        </div>
+      `
+      : '';
+
+    el.styleGrid.innerHTML = (gallery.styles ?? [])
+      .map((s) => `
+        <figure class="style-card reveal">
+          <img src="${escapeHtml(s.image_url)}" alt="${escapeHtml(s.caption ?? '')}" loading="lazy">
+          <figcaption>${escapeHtml(s.caption ?? '')}</figcaption>
+        </figure>
+      `)
+      .join('');
+  }
+
+  function renderMenus(menus) {
+    if (!menus || menus.length === 0) {
+      el.menuList.innerHTML = '<li class="menu-note">現在メニュー情報を準備中です。</li>';
+      return;
+    }
+    el.menuList.innerHTML = menus
+      .map((m) => `
+        <li class="menu-item reveal">
+          <div class="menu-item-main">
+            <h3>${escapeHtml(m.name)}</h3>
+            <p>${escapeHtml(m.description ?? '')}</p>
+          </div>
+          <div class="menu-item-price"><span class="yen">¥</span>${yenFmt.format(m.price)}</div>
+        </li>
+      `)
+      .join('');
+  }
+
+  function renderStaff(staffList) {
+    if (!staffList || staffList.length === 0) {
+      el.staffGrid.innerHTML = '';
+      return;
+    }
+    el.staffGrid.innerHTML = staffList
+      .map((s) => {
+        const avatar = s.avatar_image_url
+          ? `<img src="${escapeHtml(s.avatar_image_url)}" alt="">`
+          : AVATAR_PLACEHOLDER_SVG;
+        const nameEn = s.name_en ? `<span>${escapeHtml(s.name_en)}</span>` : '';
+        // bio_commentは店舗スタッフが入力する想定のコンテンツ(顧客からの入力ではない)で、
+        // 改行表現のために<br>を許容している。将来、管理画面から自由入力できるようにする際は
+        // サニタイズ方針を再検討すること(現状はシードデータのみ)。
+        return `
+          <div class="staff-card reveal">
+            <div class="staff-avatar" aria-hidden="true">${avatar}</div>
+            <h3 class="staff-name">${escapeHtml(s.name)} ${nameEn}</h3>
+            <p class="staff-role">${escapeHtml(s.bio_role_label ?? '')}</p>
+            <p class="staff-comment">${s.bio_comment ?? ''}</p>
+          </div>
+        `;
+      })
+      .join('');
+  }
+
+  // Google口コミ連携(2026-09-14、プレースホルダー実装)。GOOGLE_PLACES_API_KEY/GOOGLE_PLACE_IDの
+  // secretsが未設定の間はAPIが configured:false を返すので、その場合は現状のハードコード表示
+  // (HotPepperの数値)をそのまま残す。ここが失敗してもLPの他の部分には影響させない(fail-soft)。
+  async function updateGoogleRating() {
+    try {
+      const data = await apiGet('/google-rating', 0);
+      if (!data.configured || data.rating == null || data.review_count == null) return;
+      el.ratingScore.textContent = data.rating.toFixed(2);
+      el.ratingCount.textContent = `(${data.review_count}件の口コミ)`;
+    } catch {
+      // 失敗時は静的なプレースホルダー表示のまま(何もしない)。
+    }
+  }
+
+  async function init() {
+    try {
+      const [siteContent, menusRes] = await Promise.all([
+        apiGet('/site-content'),
+        apiGet('/menus'),
+      ]);
+      renderFeatures(siteContent.features);
+      renderGallery(siteContent.gallery);
+      renderStaff(siteContent.staff);
+      renderMenus(menusRes.menus);
+    } catch {
+      const message = '読み込みに失敗しました。お手数ですが再読み込みしてください。';
+      showLoadError(el.featureGrid, message);
+      showLoadError(el.interiorPhoto, message);
+      showLoadError(el.menuList, message);
+      showLoadError(el.staffGrid, message);
+    } finally {
+      // 新しく追加された.reveal要素をscroll-reveal監視の対象に加える(script.js側で定義)。
+      window.CityDogsObserveReveals?.();
+    }
+    updateGoogleRating();
+  }
+
+  init();
+})();

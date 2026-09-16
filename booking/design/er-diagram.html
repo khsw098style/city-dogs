@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>City Dogs 予約システム ER図</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #fafaf8;
+    --surface: #ffffff;
+    --border: #e4e0d8;
+    --text: #2b2620;
+    --muted: #7a7266;
+    --accent: #b4813a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    padding: 2rem 1.5rem 4rem;
+  }
+  header {
+    max-width: 1000px;
+    margin: 0 auto 1.5rem;
+  }
+  h1 {
+    font-size: 1.4rem;
+    margin: 0 0 0.4rem;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin: 0;
+  }
+  .diagram-card {
+    max-width: 1100px;
+    margin: 0 auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    overflow-x: auto;
+  }
+  .mermaid { display: flex; justify-content: center; }
+  footer {
+    max-width: 1000px;
+    margin: 1.5rem auto 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>City Dogs 予約管理システム — ER図</h1>
+  <p class="subtitle">MVPデータモデル。詳細な設計判断は data-model.md を参照。</p>
+</header>
+
+<div class="diagram-card">
+  <pre class="mermaid">
+erDiagram
+    CUSTOMERS ||--o{ RESERVATIONS : "予約する"
+    STAFF ||--o{ RESERVATIONS : "担当する"
+    STAFF ||--o{ STAFF_SHIFTS : "シフトを持つ"
+    MENUS ||--o{ RESERVATIONS : "選択される"
+
+    CUSTOMERS {
+        uuid id PK
+        text name
+        text name_kana
+        text phone UK
+        text email
+        text line_user_id UK
+        text notes
+        int no_show_count
+        boolean is_blocked
+    }
+
+    STAFF {
+        uuid id PK
+        text name
+        text name_en
+        enum role
+        text bio_role_label
+        text bio_comment
+        text avatar_image_url
+        boolean is_active
+        int display_order
+    }
+
+    MENUS {
+        uuid id PK
+        text name
+        int price
+        int duration_minutes
+        boolean is_active
+    }
+
+    SITE_FEATURES {
+        uuid id PK
+        int sort_order
+        text title
+        text description
+        boolean is_active
+    }
+
+    SITE_GALLERY_PHOTOS {
+        uuid id PK
+        enum kind
+        text image_url
+        text caption
+        int sort_order
+        boolean is_active
+    }
+
+    STAFF_SHIFTS {
+        uuid id PK
+        uuid staff_id FK
+        date date
+        boolean is_working
+        time start_time
+        time end_time
+    }
+
+    BUSINESS_DAYS {
+        date date PK
+        boolean is_open
+        time open_time
+        time close_time
+        time last_reception_time
+    }
+
+    RESERVATIONS {
+        uuid id PK
+        text reservation_number UK
+        uuid customer_id FK
+        uuid staff_id FK
+        uuid menu_id FK
+        tstzrange time_range
+        enum status
+        enum source
+        int price_at_booking
+        text notes
+    }
+  </pre>
+</div>
+
+<footer>
+  BUSINESS_DAYS は日付を介した論理的な参照のみで、外部キーは張っていません。&nbsp;/&nbsp;
+  <a href="data-model.md">data-model.md</a> &nbsp;|&nbsp; <a href="../supabase/migrations/0001_init.sql">0001_init.sql</a>
+</footer>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: "neutral" });
+</script>
+</body>
+</html>
