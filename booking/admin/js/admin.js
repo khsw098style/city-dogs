@@ -1,10 +1,24 @@
 (() => {
   'use strict';
 
-  const { SUPABASE_URL, ANON_KEY } = window.CITY_DOGS_CONFIG;
+  const { SUPABASE_URL, ANON_KEY, TURNSTILE_SITE_KEY } = window.CITY_DOGS_CONFIG;
 
   const { createClient } = window.supabase;
   const client = createClient(SUPABASE_URL, ANON_KEY);
+
+  // Cloudflare Turnstile(ログイン総当たり対策)。lp/js/reserve.jsと同じ仕組み。
+  // index.html側でrender=explicitを指定しており、スクリプト読み込み完了時にこの
+  // コールバックが呼ばれてから明示的にウィジェットを描画する。
+  let turnstileToken = null;
+  let turnstileWidgetId = null;
+  window.onTurnstileLoad = function () {
+    turnstileWidgetId = turnstile.render('#turnstileWidget', {
+      sitekey: TURNSTILE_SITE_KEY,
+      callback: (token) => { turnstileToken = token; },
+      'expired-callback': () => { turnstileToken = null; },
+      'error-callback': () => { turnstileToken = null; },
+    });
+  };
 
   const jstDateFmt = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'long', day: 'numeric', weekday: 'short' });
   const jstTimeFmt = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -62,6 +76,13 @@
     appScreen: document.getElementById('appScreen'),
     staffName: document.getElementById('staffName'),
     logoutBtn: document.getElementById('logoutBtn'),
+    changePasswordBtn: document.getElementById('changePasswordBtn'),
+    changePasswordModal: document.getElementById('changePasswordModal'),
+    changePasswordForm: document.getElementById('changePasswordForm'),
+    changePasswordError: document.getElementById('changePasswordError'),
+    changePasswordStatus: document.getElementById('changePasswordStatus'),
+    cpNewPassword: document.getElementById('cpNewPassword'),
+    cpNewPasswordConfirm: document.getElementById('cpNewPasswordConfirm'),
 
     scheduleDate: document.getElementById('scheduleDate'),
     prevDay: document.getElementById('prevDay'),
@@ -193,16 +214,29 @@
   el.loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     hideLoginError();
+
+    if (!turnstileToken) {
+      showLoginError('ロボットでないことの確認が完了していません。少し待ってから再度お試しください。');
+      return;
+    }
+
     el.loginSubmit.disabled = true;
     el.loginSubmit.textContent = 'ログイン中…';
 
     const { error } = await client.auth.signInWithPassword({
       email: el.loginEmail.value.trim(),
       password: el.loginPassword.value,
+      options: { captchaToken: turnstileToken },
     });
 
     el.loginSubmit.disabled = false;
     el.loginSubmit.textContent = 'ログイン';
+
+    // Turnstileのトークンは1回使うと無効になるため、成功/失敗にかかわらずリセットする
+    if (turnstileWidgetId !== null) {
+      turnstile.reset(turnstileWidgetId);
+      turnstileToken = null;
+    }
 
     if (error) {
       showLoginError('メールアドレスまたはパスワードが正しくありません。');
@@ -213,6 +247,47 @@
   el.logoutBtn.addEventListener('click', async () => {
     await client.auth.signOut();
   });
+
+  el.changePasswordBtn.addEventListener('click', () => {
+    el.changePasswordForm.reset();
+    hideChangePasswordError();
+    el.changePasswordStatus.textContent = '';
+    openModal(el.changePasswordModal);
+  });
+
+  el.changePasswordForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideChangePasswordError();
+
+    if (el.cpNewPassword.value !== el.cpNewPasswordConfirm.value) {
+      showChangePasswordError('新しいパスワードが一致しません。');
+      return;
+    }
+
+    const submitBtn = el.changePasswordForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    el.changePasswordStatus.textContent = '変更中…';
+
+    const { error } = await client.auth.updateUser({ password: el.cpNewPassword.value });
+
+    submitBtn.disabled = false;
+    if (error) {
+      el.changePasswordStatus.textContent = '';
+      showChangePasswordError(error.message || 'パスワードの変更に失敗しました。');
+      return;
+    }
+
+    el.changePasswordStatus.textContent = '変更しました。';
+    setTimeout(() => closeModal(el.changePasswordModal), 1200);
+  });
+
+  function showChangePasswordError(msg) {
+    el.changePasswordError.textContent = msg;
+    el.changePasswordError.hidden = false;
+  }
+  function hideChangePasswordError() {
+    el.changePasswordError.hidden = true;
+  }
 
   function showLoginError(msg) {
     el.loginError.textContent = msg;

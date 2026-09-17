@@ -17,6 +17,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/styles.css">
 <link rel="stylesheet" href="css/reserve.css">
+<!-- asyncは付けない: deferだけにしないと、window.onTurnstileLoadを定義するjs/reserve.js
+     (body末尾)より先にこのスクリプトが実行され、コールバックが見つからないことがある
+     (実機で発生。asyncを付けるとdeferが無視されて実行順の保証がなくなるため)。 -->
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad&render=explicit" defer></script>
 </head>
 <body>
 
@@ -131,6 +135,8 @@
           <label for="notesInput">ご要望(任意)</label>
           <textarea id="notesInput" name="notes" rows="3" placeholder="髪型のご希望などあればご記入ください"></textarea>
         </div>
+
+        <div class="cf-turnstile" id="turnstileWidget"></div>
 
         <p class="form-error" id="formError" hidden></p>
 

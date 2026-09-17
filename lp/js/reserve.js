@@ -2,8 +2,22 @@
   'use strict';
 
   // Supabase Edge Functions(公開API)。publishable/anonキーはクライアントに埋め込む前提の鍵。
-  const { SUPABASE_URL, ANON_KEY } = window.CITY_DOGS_CONFIG;
+  const { SUPABASE_URL, ANON_KEY, TURNSTILE_SITE_KEY } = window.CITY_DOGS_CONFIG;
   const API_BASE = `${SUPABASE_URL}/functions/v1`;
+
+  // Cloudflare Turnstile(ボット対策)。reserve.html側でrender=explicitを指定しており、
+  // スクリプト読み込み完了時にこのコールバックが呼ばれてから明示的にウィジェットを描画する
+  // (data-sitekeyをHTMLに直書きせず、config.jsの値を使うため)。
+  let turnstileToken = null;
+  let turnstileWidgetId = null;
+  window.onTurnstileLoad = function () {
+    turnstileWidgetId = turnstile.render('#turnstileWidget', {
+      sitekey: TURNSTILE_SITE_KEY,
+      callback: (token) => { turnstileToken = token; },
+      'expired-callback': () => { turnstileToken = null; },
+      'error-callback': () => { turnstileToken = null; },
+    });
+  };
 
   // seedで投入している営業日データの範囲に合わせている(現状60日先まで)。
   // 将来、店舗側で営業日をその都度設定する運用になったら見直す。
@@ -338,6 +352,7 @@
     if (!PHONE_RE.test(phone)) return showFormError('電話番号の形式が正しくありません(例: 090-1234-5678)。');
     if (!EMAIL_RE.test(email)) return showFormError('メールアドレスの形式が正しくありません。');
     if (!state.selectedMenu || !state.selectedSlot) return showFormError('メニューまたは日時が選択されていません。最初からやり直してください。');
+    if (!turnstileToken) return showFormError('ロボットでないことの確認が完了していません。少し待ってから再度お試しください。');
 
     el.submitBtn.disabled = true;
     el.submitBtn.textContent = '送信しています…';
@@ -351,6 +366,7 @@
           staff_id: state.selectedSlot.staff_id,
           start_at: state.selectedSlot.start_at,
           notes,
+          turnstile_token: turnstileToken,
         }),
       });
       renderSuccess(result);
@@ -369,6 +385,12 @@
     } finally {
       el.submitBtn.disabled = false;
       el.submitBtn.textContent = '予約を確定する';
+      // Turnstileのトークンは1回使うと無効になるため、次の送信に備えてリセットする
+      // (成功時はこの後どうせ完了画面に遷移するので実害はない)。
+      if (turnstileWidgetId !== null) {
+        turnstile.reset(turnstileWidgetId);
+        turnstileToken = null;
+      }
     }
   });
 

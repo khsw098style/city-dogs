@@ -3,6 +3,8 @@ import { ApiError, jsonResponse } from "../_shared/http.ts";
 import { computeAvailability, jstDateOf } from "../_shared/availability.ts";
 import { sendReservationConfirmationEmail } from "../_shared/reservationEmail.ts";
 import { upsertCustomerByPhone } from "../_shared/customers.ts";
+import { extractClientIp } from "../_shared/rateLimit.ts";
+import { verifyTurnstile } from "../_shared/turnstile.ts";
 import {
   isValidEmail,
   isValidJpMobilePhone,
@@ -15,6 +17,7 @@ interface CreateReservationBody {
   staff_id?: string | null;
   start_at?: string;
   notes?: string;
+  turnstile_token?: string;
 }
 
 // POST /reservations
@@ -26,6 +29,11 @@ export async function createReservation(
   headers: HeadersInit,
 ): Promise<Response> {
   const body = await parseJsonBody(req);
+
+  const turnstileOk = await verifyTurnstile(body.turnstile_token, extractClientIp(req));
+  if (!turnstileOk) {
+    throw new ApiError("VALIDATION_ERROR", "ボット判定によりリクエストを処理できませんでした。ページを再読み込みしてもう一度お試しください。");
+  }
 
   const name = requireNonEmptyString(body.customer?.name, "お名前");
   const phone = requireNonEmptyString(body.customer?.phone, "電話番号");

@@ -14,6 +14,20 @@
 // このスクリプトは実際にデプロイ済みのSupabase Edge Functionsに対して
 // 本物の予約を作成する(reserve.jsが本番APIのURLを直接叩いているため)。
 // テストデータとして残ることを許容できる環境でのみ実行すること。
+//
+// ⚠️ Cloudflare Turnstile(2026-09-16導入)について: このテストはconfig.jsの
+// TURNSTILE_SITE_KEYをCloudflare公式のテスト専用キー(常に成功する)に差し替えてから
+// 実行する(下記のpage.route参照。本番のconfig.jsファイル自体は書き換えない)。
+// これは本番用のTurnstileサイトキーだと実際にボット検知が働き、Playwrightの
+// ヘッドレスブラウザが正当にボットとして弾かれてトークンが発行されないため
+// (実機で確認済み)。ただし、これは片側(フロントエンド)だけの話で、
+// **バックエンド側のTURNSTILE_SECRET_KEYが本番の実キーのままだと、テスト用の
+// ダミートークンは「本番鍵はテスト用トークンを拒否する」というCloudflareの仕様により
+// 拒否されてしまう**。そのため、このテストを実行する前に、一時的に
+// `npx supabase secrets set TURNSTILE_SECRET_KEY="1x0000000000000000000000000000000AA"`
+// (Cloudflare公式のテスト専用シークレットキー、常に成功する)に切り替え、
+// テスト終了後は必ず本番の実キーに戻すこと。戻し忘れると、本番のTurnstile保護が
+// 効かなくなる(誰のトークンでも通ってしまう)ので特に注意。
 
 import { chromium } from 'playwright';
 import { spawn, spawnSync } from 'node:child_process';
@@ -92,6 +106,21 @@ async function run() {
     page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', (err) => consoleErrors.push('pageerror: ' + err.message));
 
+    // 本番用のTurnstileサイトキー(config.js)は実際のボット検知を行うため、Playwrightの
+    // ヘッドレスブラウザは正当にボットとして弾かれてしまい、トークンが永久に発行されない
+    // (実機で確認済み: 2026-09-16、本番キーへの切り替え直後にE2Eがタイムアウトした)。
+    // Cloudflare公式のテスト専用サイトキー(常に成功する)に、このテスト実行時だけ
+    // 差し替える。本番のconfig.jsファイル自体は書き換えない。
+    const TEST_TURNSTILE_SITE_KEY = '1x00000000000000000000AA';
+    await page.route('**/js/config.js', async (route) => {
+      const realConfig = await fs.readFile(path.join(lpRoot, 'js', 'config.js'), 'utf8');
+      const testConfig = realConfig.replace(
+        /TURNSTILE_SITE_KEY:\s*'[^']*'/,
+        `TURNSTILE_SITE_KEY: '${TEST_TURNSTILE_SITE_KEY}'`,
+      );
+      await route.fulfill({ contentType: 'application/javascript; charset=utf-8', body: testConfig });
+    });
+
     await page.goto(`${BASE_URL}/reserve.html`);
     await page.waitForSelector('.option-card', { timeout: 10000 });
     await page.screenshot({ path: path.join(shotDir, '1-menu.png') });
@@ -136,6 +165,13 @@ async function run() {
     await page.fill('#phoneInput', '090-0000-0000');
     await page.fill('#emailInput', 'e2e-test@example.com');
     await page.fill('#notesInput', 'このデータはPlaywright E2Eテストによる自動生成です。');
+    // Cloudflare Turnstileのトークン生成は非同期(テスト用サイトキーでは数秒で完了するが、
+    // 実際のサイトキーだと時間がかかりうる)。生成前にクリックすると「ロボットでないことの
+    // 確認が完了していません」で弾かれるため、固定waitではなくトークンが入るまで待つ。
+    await page.waitForFunction(() => {
+      const input = document.querySelector('input[name="cf-turnstile-response"]');
+      return input && input.value;
+    }, { timeout: 15000 });
     await page.click('#submitBtn');
     await page.waitForSelector('#stepResult.is-active', { timeout: 10000 });
     await page.waitForTimeout(300);

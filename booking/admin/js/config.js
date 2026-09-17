@@ -6,4 +6,8 @@
 window.CITY_DOGS_CONFIG = {
   SUPABASE_URL: 'https://cwojmmrnhvemupxubtus.supabase.co',
   ANON_KEY: 'sb_publishable_nYEHBjojuRPhIpjBPKG4NQ_nNfQVn7E',
+  // Cloudflare Turnstileのサイトキー(公開情報、秘匿不要)。lp/js/config.jsと同じサイトを再利用。
+  // このドメイン(city-dogs-admin-deploy.khs-w098style.workers.dev)をCloudflareのHostname
+  // Managementに追加登録しないとウィジェットが表示されないので、本番反映時は要確認。
+  TURNSTILE_SITE_KEY: '0x4AAAAAAE4sxhHQSTp5lim6',
 };

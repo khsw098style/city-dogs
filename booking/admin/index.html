@@ -16,6 +16,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/admin.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0"></script>
+<!-- asyncは付けない: deferだけにしないと、window.onTurnstileLoadを定義するjs/admin.jsより先に
+     このスクリプトが実行され、コールバックが見つからなくなる(lp/reserve.htmlと同じ理由)。 -->
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad&render=explicit" defer></script>
 </head>
 <body>
 
@@ -34,6 +37,8 @@
       <input type="password" id="loginPassword" autocomplete="current-password" required>
     </div>
 
+    <div class="cf-turnstile" id="turnstileWidget"></div>
+
     <p class="form-error" id="loginError" hidden></p>
 
     <button type="submit" class="btn btn-primary" id="loginSubmit">ログイン</button>
@@ -50,6 +55,7 @@
     </div>
     <div class="app-header-right">
       <span class="staff-name" id="staffName"></span>
+      <button type="button" class="btn btn-ghost btn-small" id="changePasswordBtn">パスワードを変更</button>
       <button type="button" class="btn btn-ghost btn-small" id="logoutBtn">ログアウト</button>
     </div>
   </header>
@@ -402,6 +408,31 @@
       <div class="content-card-actions">
         <button type="submit" class="btn btn-primary">保存</button>
         <span class="save-status" id="staffShiftSaveStatus"></span>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- パスワード変更モーダル -->
+<div id="changePasswordModal" class="modal-backdrop" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="changePasswordTitle">
+    <div class="modal-header">
+      <h2 id="changePasswordTitle">パスワードを変更</h2>
+      <button type="button" class="modal-close" data-close-modal="changePasswordModal" aria-label="閉じる">&times;</button>
+    </div>
+    <form id="changePasswordForm" class="modal-body">
+      <p class="form-error" id="changePasswordError" hidden></p>
+      <div class="field">
+        <label for="cpNewPassword">新しいパスワード</label>
+        <input type="password" id="cpNewPassword" autocomplete="new-password" minlength="8" required>
+      </div>
+      <div class="field">
+        <label for="cpNewPasswordConfirm">新しいパスワード(確認)</label>
+        <input type="password" id="cpNewPasswordConfirm" autocomplete="new-password" minlength="8" required>
+      </div>
+      <div class="content-card-actions">
+        <button type="submit" class="btn btn-primary">変更する</button>
+        <span class="save-status" id="changePasswordStatus"></span>
       </div>
     </form>
   </div>

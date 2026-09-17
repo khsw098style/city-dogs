@@ -2,7 +2,7 @@
 
 このリポジトリ(city-dogs)を新しい店舗向けに複製して使う場合の手順。上から順に実施すれば、抜け漏れなく1店舗分のセットアップが完了するようにまとめてある。
 
-背景・設計判断(なぜテンプレート方式にしたか、本格マルチテナントSaaSにはしなかったか)は [CLAUDE.md](./CLAUDE.md) の「他店舗への展開手順」節を参照。このファイルは実作業用のチェックリストに特化する。
+背景・設計判断(なぜテンプレート方式にしたか、本格マルチテナントSaaSにはしなかったか)は [CLAUDE.md](./CLAUDE.md) の「他店舗への展開方針」節を参照。このファイルは実作業用のチェックリストに特化する。
 
 店舗固有のファイルには `🏪 店舗固有` というコメントを付けてある。まずそれらを`grep -rn "🏪"`で検索して一覧を洗い出すのもおすすめ。
 
@@ -20,7 +20,7 @@
 
 ## 2. 店舗固有ファイルの書き換え(`🏪 店舗固有` コメント参照)
 
-- [ ] `lp/js/config.js` の `SUPABASE_URL` / `ANON_KEY` を新プロジェクトの値に書き換え
+- [ ] `lp/js/config.js` の `SUPABASE_URL` / `ANON_KEY` を新プロジェクトの値に書き換え。`TURNSTILE_SITE_KEY`もCloudflareダッシュボード(Turnstile → Add widget)で発行した本番用サイトキーに差し替え(テスト用キー`1x00000000000000000000AA`のままでは公開後も検証が常に成功してしまい、ボット対策として機能しない)。Hostname Managementには**本番ドメインと`localhost`の両方**を登録すること(`localhost`が無いとローカルE2Eテストが後述の理由でタイムアウトする)
 - [ ] `booking/admin/js/config.js` の `SUPABASE_URL` / `ANON_KEY` を新プロジェクトの値に書き換え
 - [ ] `booking/supabase/seed.sql` を新店舗のメニュー・スタッフ名・営業時間(定休日パターン含む)に書き換える
 - [ ] 書き換えた seed.sql を投入: `npx supabase db push --include-seed`(反映されない場合は `npx supabase db query --linked -f supabase/seed.sql` で直接実行。過去に前者だけでは反映されないことがあった)
@@ -44,22 +44,26 @@
 
 ## 5. Secrets(`npx supabase secrets set ...`)
 
-- [ ] `ALLOWED_ORIGINS="https://<新店舗の本番ドメイン>"`(未設定だと全オリジン許可`*`のままなので公開前に必須)
+- [ ] `ALLOWED_ORIGINS="https://<LPの本番ドメイン>,https://<管理画面の本番ドメイン>,http://localhost:5500,http://localhost:5501,http://localhost:5502"`(未設定だと全オリジン許可`*`のままなので公開前に必須。**末尾のlocalhostの3ポートは`lp/tests/*.e2e.mjs`・`admin.e2e.mjs`が使う固定ポートなので、本番ドメインに絞っても必ず残すこと**。外すとローカルE2Eテストが軒並みCORSで失敗する)
 - [ ] `RESEND_API_KEY="<Resendダッシュボードで発行したAPIキー>"`
-- [ ] `MANAGE_PAGE_BASE_URL="https://<新店舗の本番ドメイン>/manage.html"`
+- [ ] `MANAGE_PAGE_BASE_URL="https://<LPの本番ドメイン>/manage.html"`
 - [ ] `RESEND_FROM_ADDRESS="<新店舗名> <no-reply@新店舗ドメイン>"`(独自ドメインをResend側で検証済みであること)
+- [ ] `TURNSTILE_SECRET_KEY="<Cloudflare Turnstileダッシュボードで発行したシークレットキー>"`(未設定の間はfail-openで検証がスキップされるだけなので、設定し忘れると気づきにくい。本番公開前に必ず設定すること)。**本番の実キーを設定すると、`lp/tests/reserve.e2e.mjs`を実行する前に一時的にテスト用シークレットキー(`1x0000000000000000000000000000000AA`)へ戻す必要がある**(テスト用サイトキーが発行するダミートークンは本番の実キーでは拒否される仕様のため)。テスト実行後は本番キーに戻し忘れないこと。詳細は`reserve.e2e.mjs`冒頭のコメントとCLAUDE.mdを参照
 - [ ] (任意)Google口コミ連携を使う場合: `GOOGLE_PLACES_API_KEY` / `GOOGLE_PLACE_ID`(Google Cloud側でのプロジェクト作成・請求先登録・APIキー発行・Place ID特定が別途必要)
 
-## 6. ホスティング・ドメイン
+## 6. ホスティング・ドメイン(Cloudflare Workers)
 
-- [ ] `lp/`用のホスティング(Cloudflare Pages等)プロジェクトを作成しデプロイ
-- [ ] `booking/admin/`用のホスティングプロジェクトを作成しデプロイ(`lp/`と同一ホストにまとめるか分けるかは要検討)
-- [ ] 独自ドメインを取得し、上記ホスティングにアタッチ
-- [ ] `manage.html?token=...` のようなクエリ文字列付きURLが、そのホスティング先の「クリーンURL」的な機能でリダイレクト時に欠落しないか実機で確認する(過去に`serve`パッケージのclean URLsで実際に踏んだ不具合。ホスティング先ごとに挙動が異なりうる)
+- [ ] Cloudflareダッシュボード「Workers & Pages」→「Create」→「Import a repository」で、新しいGitHubリポジトリと連携(GitHub Appのインストール範囲は「Only select repositories」でそのリポジトリだけに絞る)
+- [ ] `lp/`用のプロジェクトを作成: Path(Root directory)を`lp`に設定。Build commandは空欄、Deploy commandは`npx wrangler deploy`のまま(`lp/wrangler.jsonc`が読まれる)。API tokenは「Create new token」のまま(自動生成でよい)
+- [ ] `booking/admin/`用のプロジェクトも同じ手順で作成(Pathを`booking/admin`に)
+- [ ] デプロイ後に発行される`.workers.dev`のURLで、両方のサイトが正しく表示されるか実機確認
+- [ ] `manage.html?token=...` のようなクエリ文字列付きURLが、クリーンURLへのリダイレクト時に欠落しないか実機で確認する(Cloudflare Workersではクエリ文字列は保持されることを確認済みだが、念のため新環境でも確認しておく)
+- [ ] `/package.json`・`/tests/...`等の開発用ファイルが公開されていないか確認(`lp/.assetsignore`・`booking/admin/.assetsignore`で除外される設計だが、`wrangler deploy --dry-run`では効果を確認できないため、実際のデプロイ後にURLへ直接アクセスして404になることを確認する)
+- [ ] 独自ドメインを取得し、上記2つのCloudflareプロジェクトにアタッチ
 
 ## 7. 本番公開前の最終確認
 
-- [ ] 実際にWeb予約フローを一通り試す(予約作成→確認メール受信→`manage.html`での照会・キャンセル)
+- [ ] 実際にWeb予約フローを一通り試す(予約作成→確認メール受信→`manage.html`での照会・キャンセル)。本番用のTurnstileサイトキーに差し替えた後は、ウィジェットが正しく表示され、送信できることも確認する
 - [ ] 管理画面にログインし、電話予約の代理登録・ステータス変更・リスケジュール・営業日/シフト設定・顧客管理が一通り動くか確認
 - [ ] 営業時間・メニュー・料金など、seed.sqlに入れた仮データが実際の店舗情報と一致しているか最終確認
 - [ ] 電話番号・LINEリンクがプレースホルダーのままになっていないか確認
@@ -68,4 +72,4 @@
 
 ---
 
-**このチェックリストの更新について**: City Dogs本体に新しい設定項目(secrets・Edge Function・手動セットアップ手順)が増えたときは、このファイルも合わせて更新すること。特にCloudflare Turnstile(ボット対策)は2026-09-16時点でまだ未実装のため、実装され次第このチェックリストにも追加する必要がある。
+**このチェックリストの更新について**: City Dogs本体に新しい設定項目(secrets・Edge Function・手動セットアップ手順)が増えたときは、このファイルも合わせて更新すること。
