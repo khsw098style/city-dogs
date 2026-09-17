@@ -430,7 +430,7 @@
         <p style="font-size:0.82rem;color:var(--muted)">ご入力いただいたメールアドレス宛に、予約の確認・変更・キャンセルができるリンクをお送りしました。予約番号とご登録の電話番号も、お問い合わせの際に必要です。控えておいてください。</p>
         <div class="result-actions">
           <a href="index.html" class="btn btn-primary">トップページに戻る</a>
-          <a href="tel:098XXXXXXX" class="btn btn-outline">お店に電話する</a>
+          <a href="tel:08064810409" class="btn btn-outline">お店に電話する</a>
         </div>
       </div>
     `;

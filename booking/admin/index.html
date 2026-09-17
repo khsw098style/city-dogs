@@ -143,11 +143,23 @@
       </p>
 
       <nav class="content-subnav" aria-label="LPコンテンツ内の移動">
+        <a href="#content-rating">評価バッジ</a>
         <a href="#content-features">CONCEPT</a>
         <a href="#content-gallery">SHOP &amp; STYLE</a>
         <a href="#content-menus">MENU &amp; PRICE</a>
         <a href="#content-staff">STAFF</a>
       </nav>
+
+      <h2 class="content-heading" id="content-rating">評価バッジ(★スコア・口コミ件数)</h2>
+      <p class="content-note">
+        LPヒーローの「★★★★★ 4.88(11件の口コミ)」表示用の数字です。API連携はしていないため、HotPepper等の実際の掲載ページを見ながら手動で更新してください。
+      </p>
+      <form id="ratingForm" class="content-add-form">
+        <div class="field"><label for="ratingScoreInput">評価スコア(0〜5)</label><input type="text" id="ratingScoreInput" inputmode="decimal" required></div>
+        <div class="field"><label for="ratingCountInput">口コミ件数</label><input type="text" id="ratingCountInput" inputmode="numeric" required></div>
+        <button type="submit" class="btn btn-primary btn-small">保存</button>
+        <span class="save-status" id="ratingSaveStatus"></span>
+      </form>
 
       <h2 class="content-heading" id="content-features">CONCEPT(特徴カード)</h2>
       <div id="featureCards" class="content-card-list">

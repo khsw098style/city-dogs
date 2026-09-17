@@ -81,7 +81,7 @@
         <p>${escapeHtml(message)}</p>
         <div class="result-actions">
           <a href="index.html" class="btn btn-primary">トップページに戻る</a>
-          <a href="tel:098XXXXXXX" class="btn btn-outline">お店に電話する</a>
+          <a href="tel:08064810409" class="btn btn-outline">お店に電話する</a>
         </div>
       </div>
     `;
@@ -125,7 +125,7 @@
         ${canCancel ? `
           <p class="manage-note">ご予約の変更(日時・メニューの変更)は、お手数ですが一度キャンセルのうえ、改めてWEBまたはお電話でご予約ください。</p>
           <div class="wizard-actions">
-            <a href="tel:098XXXXXXX" class="btn btn-outline">お店に電話する</a>
+            <a href="tel:08064810409" class="btn btn-outline">お店に電話する</a>
             <button type="button" class="btn btn-primary" id="cancelBtn" style="background:linear-gradient(135deg,#c0614a,#963a29);">この予約をキャンセルする</button>
           </div>
           <div id="cancelConfirm" hidden></div>
@@ -133,7 +133,7 @@
           <p class="manage-note">この予約はすでに${escapeHtml(meta.label)}のため、これ以上の操作はできません。ご不明な点はお店までお問い合わせください。</p>
           <div class="wizard-actions">
             <span></span>
-            <a href="tel:098XXXXXXX" class="btn btn-outline">お店に電話する</a>
+            <a href="tel:08064810409" class="btn btn-outline">お店に電話する</a>
           </div>
         `}
       </div>

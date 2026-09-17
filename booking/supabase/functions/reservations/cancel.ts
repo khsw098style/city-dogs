@@ -56,14 +56,24 @@ export async function cancelReservation(
     throw new ApiError("INVALID_STATUS_TRANSITION", "この予約はすでにキャンセルまたは完了しています。");
   }
 
-  const { error: updateErr } = await client
+  // 上のチェックはUXのための早期判定に過ぎない。SELECTとUPDATEの間に別リクエスト
+  // (例: 管理画面での会計完了)がstatusを変えている可能性があるため、UPDATE自体にも
+  // status条件を付けて原子的に判定する(2026-09-17、コードレビューで発見・修正)。
+  const { data: updated, error: updateErr } = await client
     .from("reservations")
     .update({ status: "cancelled_by_customer", cancel_reason: "顧客によるキャンセル(Web)" })
-    .eq("id", reservation.id);
+    .eq("id", reservation.id)
+    .in("status", ACTIVE_STATUSES)
+    .select("id")
+    .maybeSingle();
 
   if (updateErr) {
     console.error("reservation cancel failed:", updateErr);
     throw new ApiError("INTERNAL_ERROR", "キャンセル処理に失敗しました。");
+  }
+  if (!updated) {
+    // 取得後に他の操作でstatusが変わっていた(競合)。
+    throw new ApiError("INVALID_STATUS_TRANSITION", "この予約はすでにキャンセルまたは完了しています。");
   }
 
   return jsonResponse({ status: "cancelled_by_customer" }, { headers });

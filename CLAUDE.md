@@ -34,7 +34,7 @@
 | WEB予約(`reserve.html`) | 同上。Supabase公開APIへ直接fetch | publishable keyをクライアントに埋め込み(想定通りの使い方)。メールアドレスが予約時必須項目 |
 | 予約管理リンク(`manage.html`) | ログイン不要。`manage_token`をURLクエリで受け取り、予約1件の照会・キャンセルを行う | 予約確定メールに記載されるリンク。詳細は[booking/design/data-model.md](./booking/design/data-model.md)の「6. 顧客ログインを作らない予約管理」 |
 | ホスティング | 未定(Vercel / Netlify / Cloudflare Pages想定、無料枠) | 独自ドメインのみ有料(年数千円)。**ホスティング先選定時に、クエリ文字列付きURL(`manage.html?token=...`)がリダイレクトで欠落しないか要確認**(ローカルの`serve`パッケージでは「clean URLs」機能がこれを壊す不具合があり実際に踏んだ。`lp/serve.json`で無効化済み) |
-| 画像 | `images/`配下にローカル格納 | HotPepper掲載写真を店舗オーナー了承のもと使用。Web公開前に改めて許諾を得ること |
+| 画像 | `images/`配下にローカル格納 | HotPepper掲載写真を店舗オーナー了承のもと使用。Web公開版としての使用許諾も正式に取得済み(2026-09-17) |
 | LPコンテンツ管理画面【実装済み(2026-09-13〜14)】 | 別アプリは新設せず`booking/admin/`に「LPコンテンツ」タブとして統合 | 当初は別アプリ構想だったが、既存の予約管理画面に統合する方針に変更して実装済み。CONCEPT(特徴カード)・SHOP & STYLE(写真)・MENU & PRICE(メニュー・料金)・STAFF(紹介文)をコード修正なしに更新できる。詳細は下の「予約管理画面(`booking/admin/`)」の行を参照 |
 
 ### 予約管理システム(`booking/`)
@@ -106,9 +106,11 @@ city-dogs/
         │   ├── 0002_staff_auth.sql  # staff.auth_user_id 追加(管理画面ログイン用)
         │   ├── 0003_reservation_manage_token.sql  # reservations.manage_token 追加(顧客向け予約管理リンク用)
         │   ├── 0004_site_content.sql  # LPコンテンツ管理用(staffのbio系カラム、site_features、site_gallery_photos)
-        │   ├── 0005_google_rating_cache.sql  # Google口コミ連携のキャッシュ用(1行のみ、プレースホルダー実装)
+        │   ├── 0005_google_rating_cache.sql  # (2026-09-17 撤回済み。0009でテーブルごと削除。旧: Google口コミ連携のキャッシュ用)
         │   ├── 0006_enable_row_level_security.sql  # 【セキュリティ修正】全テーブルでRLS有効化(ポリシーなし=直接アクセス全遮断)
-        │   └── 0007_rate_limiting.sql  # 公開APIのレート制限用(rate_limit_buckets テーブル+ rate_limit_hit() RPC)
+        │   ├── 0007_rate_limiting.sql  # 公開APIのレート制限用(rate_limit_buckets テーブル+ rate_limit_hit() RPC)
+        │   ├── 0008_staff_shift_breaks.sql  # staff_shiftsに休憩時間カラム追加
+        │   └── 0009_site_rating.sql  # google_rating_cache削除+site_rating新設(評価バッジの手動更新用、1行のみ)
         └── functions/
             ├── deno.json         # npm:specifierはインラインのまま(import map未使用、理由はsupabase/README.md参照)
             ├── _shared/          # 複数Functionで共有するロジック(空き枠計算・認証・range解析・バリデーション・メール送信等)。
@@ -119,13 +121,12 @@ city-dogs/
             ├── reservations/     # POST /reservations, GET /reservations/lookup, POST /reservations/:reservation_number/cancel,
             │                     # GET /reservations/manage, POST /reservations/manage/cancel
             ├── admin-reservations/  # 【要ログイン】GET/POST /admin-reservations, GET /admin-reservations/schedule, PATCH /admin-reservations/:id
-            ├── site-content/     # GET /site-content(LPのCONCEPT/SHOP&STYLE/STAFF紹介文。公開・認証不要)
-            ├── admin-site-content/  # 【要ログイン】/admin/site-content/features・/gallery・/staff のCRUD(LPコンテンツ編集用)
+            ├── site-content/     # GET /site-content(LPのCONCEPT/SHOP&STYLE/STAFF紹介文・評価バッジ。公開・認証不要)
+            ├── admin-site-content/  # 【要ログイン】/admin/site-content/features・/gallery・/staff・/rating のCRUD(LPコンテンツ編集用)
             ├── admin-menus/      # 【要ログイン】GET/POST /admin-menus, PATCH /admin-menus/:id(メニュー・料金編集用。削除は不可)
             ├── admin-business-days/  # 【要ログイン】GET/PUT /admin-business-days, POST .../generate-month(月次営業日設定)
             ├── admin-staff-shifts/   # 【要ログイン】GET/PUT /admin-staff-shifts, POST .../generate-month(月次シフト設定)
-            ├── admin-customers/      # 【要ログイン】GET /admin-customers(検索), GET/PATCH /admin-customers/:id(お客様管理)
-            └── google-rating/    # GET /google-rating(LP評価バッジ用。公開・認証不要。2026-09-14プレースホルダー実装)
+            └── admin-customers/      # 【要ログイン】GET /admin-customers(検索), GET/PATCH /admin-customers/:id(お客様管理)
 ```
 
 管理APIは「閲覧」機能(予約一覧検索・日付×スタッフのスケジュール表示)、LPコンテンツ編集系(CONCEPT/SHOP&STYLE/STAFF/メニュー)、電話予約の代理登録・ステータス変更、月次営業日・シフト設定、顧客管理(no_show/ブロック)まで、api-design.mdに記載の管理API・管理画面がすべて実装済み(2026-09-16時点)。
@@ -175,9 +176,9 @@ SUPABASE_SERVICE_ROLE_KEY=<Project Settings > API のservice_roleキー> npm run
 
 ## 現在地・未決事項
 
-- **LP**: 一通り完成(店内・スタイル写真反映済み)。WEB予約ボタンは実装済みの予約UI(`reserve.html`)に接続済み(旧「準備中」ダミー・モーダルは削除)。電話番号がプレースホルダー(`098-XXX-XXXX`)のままなので、実際の番号への差し替えが必要
+- **LP**: 一通り完成(店内・スタイル写真反映済み)。WEB予約(`reserve.html`)自体は実装・デプロイ済みで稼働しているが、**2026-09-17時点ではLPからの導線を意図的に一時クローズ中**(オーナー説明の都合。「WEBで予約する」ボタンは非表示にし、「WEBでのご予約は近日公開予定です」という案内文に差し替えている。バックエンド・reserve.html自体は温存しており、リンクを戻すだけで即座に再公開できる)。電話番号は実際の値(`080-6481-0409`)に差し替え済み(2026-09-17。当初「電話予約は行っていない」とのことで一度LP全体から削除したが、店舗に確認したところ電話予約も受け付けるとのことで復元した。ヘッダー・ヒーロー・アクセス欄・CTA・フローティングボタンの計6箇所)
 - **⚠️ デバイス優先度の確認(2026-09-13)**: 顧客向けLP・予約フロー(`index.html`/`reserve.html`/`manage.html`)は**スマホ利用が大多数になる想定**とユーザーが明言。`styles.css`/`reserve.css`のブレークポイント(860/720/560/520px)とE2Eテスト(420×900のスマホ相当ビューポート)で確認済みだが、今後この3画面に手を入れる際は必ずモバイル幅での見た目を優先して確認すること。逆に予約管理画面(`booking/admin/`)はPC専用で問題ない、とユーザーが確定(スタッフはPC/タブレットから利用する運用のため、モバイル最適化は不要)
-- **⚠️ 営業時間の要確認**: Instagram(@citydogs928)のbioには「10:00〜19:00」と記載されているが、LP・seed.sqlは元のHotPepper記載(平日10:00〜18:00・土日9:00〜18:00)のまま。どちらが正しいか店舗に確認し、正しければLPの表記と`booking/supabase/seed.sql`の営業日生成ロジック両方を修正すること
+- **営業時間の確認完了(2026-09-17)**: Instagram(@citydogs928)のbio「10:00〜19:00」は誤りで、正しくは既存のLP・seed.sqlの記載(平日10:00〜18:00・土日9:00〜18:00、いずれも最終受付)の通りと店舗に確認済み。コード変更は不要
 - **予約UI(`lp/reserve.html`)**: メニュー選択→**担当スタイリスト選択(リストボックス、「指名なし(おまかせ)」がデフォルト)**→日時選択→お客様情報入力→確定、の3ステップウィザード。電話番号はハイフン自動整形。Playwrightで実ブラウザ・実APIに対してエンドツーエンドテスト済み(二重予約防止の除外、指名したスタイリストどおりに予約されることもUI経由で確認済み)
 - **担当スタイリスト選択**: `staff`テーブルに行を追加するだけで(コード変更不要で)リストボックスに自動反映される設計。`GET /staff`(`role != 'assistant'`かつ稼働中のスタッフを返す)を新設し、`computeAvailability()`が元々持っていた`staffId`フィルタ引数と組み合わせて実現。現状スタイリストは當眞優希1名のみだが、2人目以降が増えてもフロント・バックエンドとも改修不要
 - **予約システム(バックエンド公開API)**: `menus` / `staff` / `availability` / `reservations` を実装・デプロイ・テスト済み。空き枠の時間刻みは30分(元15分から変更)。動作確認中に発見・修正したバグ: ①`--use-api`デプロイがimport mapを含むdeno.jsonを拾わずビルド失敗(インライン`npm:`指定子に戻して解決) ②`POST /reservations/:id/cancel`が顧客の知り得ない内部UUIDを要求していた設計バグ(`reservation_number`ベースに変更) ③型チェックで検出した埋め込みクエリの型不整合(2段階クエリに分割) ④完了画面で進捗インジケーターが「完了」にならない表示バグ(`hidden`属性とCSSの`display`指定の競合。`[hidden]{display:none!important}`を追加して解決)
@@ -217,7 +218,11 @@ SUPABASE_SERVICE_ROLE_KEY=<Project Settings > API のservice_roleキー> npm run
   - 電話番号の編集は代理予約登録と同じ自動ハイフン整形(`formatPhoneNumber`の使い回し)。`customers.phone`のunique制約に違反した場合は`23505`をハンドリングして分かりやすいエラーメッセージを返す
   - 顧客の削除は提供しない。理由はstaff/menusと同様`reservations.customer_id`の外部キー制約に加え、顧客は予約経由でしか作られない設計のため「テストで手動作成してしまい削除したい」という需要自体が発生しにくい(手動追加フォームを用意していない)
   - E2Eテストも追加(ステップ14、2026-09-16にユーザーの実行でAllグリーン確認済み): 代理予約(ステップ10)で作った顧客を電話番号検索→メモ・要注意フラグを編集→保存→予約履歴を展開してその予約番号が表示されることを確認
-- **Google口コミ連携 — 配線のみ実装済み(2026-09-14、プレースホルダー状態)**: LPヒーローの「★★★★★ 4.88(11件の口コミ)」はHotPepperの表示を手動コピーした静的なハードコード値だったが(自動取得の仕組みは元々何もなかった)、HotPepper解約も見据えてGoogle口コミへの切り替えができるよう先に配線した。新規Function `GET /google-rating` は`GOOGLE_PLACES_API_KEY`/`GOOGLE_PLACE_ID`のsecrets未設定の間は`configured:false`を返すだけで、LP側は現状の数値表示を維持する(fail-soft)。secretsを設定すれば追加のコード変更なしに実際のGoogle評価に切り替わる。**コスト注意**: `rating`/`userRatingCount`はGoogle Places API(New)で最も高い「Enterprise SKU」区分(無料枠は月1,000回)なので、`google_rating_cache`テーブルで24時間キャッシュし呼び出し頻度を抑える設計にしてある。Google Cloud側の準備(プロジェクト作成・請求先登録・APIキー発行・Place ID特定)はユーザー側で対応が必要。詳細は[api-design.md](./booking/design/api-design.md)の「GET /google-rating」参照
+- **Google口コミ連携 — 実装後に撤回、手動更新方式へ切り替え(2026-09-17)**: LPヒーローの「★★★★★ 4.88(11件の口コミ)」表示について、2026-09-14に配線(`GET /google-rating`、`google_rating_cache`テーブルで24時間キャッシュ)を実装し、2026-09-17にはユーザーがGoogle Cloud側の準備(プロジェクト作成・請求先登録・Places API (New)有効化・APIキー発行・Place ID特定)を完了、実際に`GOOGLE_PLACES_API_KEY`/`GOOGLE_PLACE_ID`を設定して本番稼働までさせた(実機で`{"configured":true,"rating":5,"review_count":10}`を確認)。**その直後、Google Maps Platformの利用規約を確認したところ、`rating`/`review_count`のような評価データは自社DBへのキャッシュ・保存自体が規約違反の可能性が高い(`place_id`は無期限保存可、緯度経度は30日まで可、だがrating/reviews/name/photos/phone numbersは「request it live, display it, do not warehouse it」= 都度ライブ取得必須、と複数の情報源で確認)ことが判明した**。一方、都度ライブ取得に切り替えると無料枠(月1,000回)を日割りで33回程度しか使えず、アクセス数次第で簡単に課金が発生するリスクがある(規約遵守とコスト管理が両立しない)。ユーザー判断で**Google口コミ連携自体を完全に撤回**することにした。
+  - 撤回時の対応: `google-rating` Edge Function・`google_rating_cache`テーブルを物理削除(`0009_site_rating.sql`)。デプロイ済みFunctionも`supabase functions delete`、secrets(`GOOGLE_PLACES_API_KEY`/`GOOGLE_PLACE_ID`)も`supabase secrets unset`で削除済み
+  - 代わりに、評価スコア・口コミ件数を**管理画面(`booking/admin/`の「LPコンテンツ」タブ)から手動更新できる**方式に変更。新設の`site_rating`テーブル(1行のみ)を`GET /site-content`のレスポンスに含め、LPはそれをそのまま表示するだけ(API連携なし)。管理画面には評価スコア・口コミ件数を入力する小さなフォームを追加(`admin-site-content/rating.ts`、`GET/PUT /admin-site-content/rating`)。HotPepper等の実際の掲載ページを見ながら、スタッフが不定期に手動で書き換える運用を想定
+  - **教訓: 外部API連携を実装する際は「コスト」だけでなく「利用規約上のデータ保存・キャッシュ制限」も実装前に確認すること。**今回は先にコスト面(Enterprise SKUの無料枠)だけ調べて設計し、規約面の確認が後回しになったため、実装・本番稼働まで進めてから手戻りになった
+  - なお、漏洩したAPIキー(チャット上で共有されたもの)は撤回に伴い無効化(secrets unset)済み。Google Cloud側のプロジェクト・APIキー自体の削除はユーザー側の任意対応(このシステムのコードには一切残っていないため、削除してもしなくても実害はない)
 - **🚨 セキュリティ修正(2026-09-16)— 全テーブルでRow Level Security(RLS)が未設定だった**: Supabase Security Advisorの警告(`rls_disabled_in_public`)をきっかけに発覚。プロジェクト開始時からどのテーブルにもRLSが一度も有効化されておらず、LP・管理画面のクライアントJSに埋め込んでいるpublishable(anon)キーだけで、Edge Functionsを一切経由せずPostgREST自動API(`/rest/v1/<table>`)経由に顧客の氏名・電話番号・メールアドレス等を含む全テーブルを直接読み書き・削除できる状態だった。**実際にanon keyで`customers`テーブルの氏名・電話番号・メールアドレスが直接読み取れることをcurlで実証してから修正**。`0006_enable_row_level_security.sql`で9テーブル全て(`customers`/`staff`/`menus`/`business_days`/`staff_shifts`/`reservations`/`site_features`/`site_gallery_photos`/`google_rating_cache`)にRLSを有効化(ポリシーは1つも作らず、有効化するだけ=anon/authenticatedロールからは何も見えない状態にする)。Edge Functionsは全てservice_roleクライアント(RLSを無視するbypassrls権限を持つ)経由でDBにアクセスしているため、この変更による機能への影響はない(適用後に`/menus`・`/site-content`・`/staff`・`/availability`が正常動作することを確認済み)。**教訓: 「アプリ層でPostgREST直叩きを禁止する設計方針」はDB側の強制力を伴わないため、テーブル作成時は必ずRLSも同時に有効化する習慣が必要。今後新しいテーブルを追加する際は、マイグレーションに`enable row level security`を含めることを忘れないこと**
 - **公開APIのレート制限 — 実装・デプロイ済み(2026-09-16)**: 下の「納品までに対応する」1.で洗い出した`GET /reservations/lookup`(電話番号+連番のreservation_numberでの総当たり)対策として、固定ウィンドウ方式のレート制限を実装した。
   - `0007_rate_limiting.sql`: `rate_limit_buckets(key, count, window_start)`テーブル(RLS有効・ポリシーなし)と、`rate_limit_hit(p_key, p_limit, p_window_seconds)` RPC(単一の`INSERT .. ON CONFLICT DO UPDATE .. RETURNING`で原子的にカウント。read-then-writeによる競合状態を避けている)

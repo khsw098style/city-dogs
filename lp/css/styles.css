@@ -314,7 +314,11 @@ a { color: inherit; text-decoration: none; }
   border-radius: 999px;
   font-size: 0.88rem;
   color: var(--muted);
+  text-decoration: none;
+  transition: border-color 0.2s ease;
 }
+.hero-rating:hover,
+.hero-rating:focus-visible { border-color: var(--gold); }
 .stars { color: var(--gold); letter-spacing: 0.1em; }
 .rating-score { font-family: var(--font-accent); color: var(--cream); font-weight: 600; }
 

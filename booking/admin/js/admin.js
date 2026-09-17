@@ -95,6 +95,11 @@
     searchResultMeta: document.getElementById('searchResultMeta'),
     searchArea: document.getElementById('searchArea'),
 
+    ratingForm: document.getElementById('ratingForm'),
+    ratingScoreInput: document.getElementById('ratingScoreInput'),
+    ratingCountInput: document.getElementById('ratingCountInput'),
+    ratingSaveStatus: document.getElementById('ratingSaveStatus'),
+
     featureCards: document.getElementById('featureCards'),
     featureAddForm: document.getElementById('featureAddForm'),
     galleryCards: document.getElementById('galleryCards'),
@@ -837,11 +842,42 @@
   function loadContentTabOnce() {
     if (contentTabLoaded) return;
     contentTabLoaded = true;
+    loadRating();
     loadFeatures();
     loadGallery();
     loadMenus();
     loadStaffBios();
   }
+
+  async function loadRating() {
+    try {
+      const data = await apiFetch('admin-site-content', '/rating');
+      el.ratingScoreInput.value = data.rating.rating;
+      el.ratingCountInput.value = data.rating.review_count;
+    } catch (err) {
+      showSaveStatus(el.ratingSaveStatus, `取得に失敗: ${err.message}`, false);
+    }
+  }
+
+  el.ratingForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const submitBtn = el.ratingForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      await apiFetch('admin-site-content', '/rating', {
+        method: 'PUT',
+        body: {
+          rating: Number(el.ratingScoreInput.value),
+          review_count: Number(el.ratingCountInput.value),
+        },
+      });
+      showSaveStatus(el.ratingSaveStatus, '保存しました', true);
+    } catch (err) {
+      showSaveStatus(el.ratingSaveStatus, `保存に失敗: ${err.message}`, false);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
 
   async function loadFeatures() {
     el.featureCards.innerHTML = '<p class="status-text">読み込み中…</p>';
@@ -1419,14 +1455,25 @@
 
   let businessDaysByDate = new Map();
 
+  // シフトタブを開いた直後(今日の月で自動読み込み)と、その直後に月を切り替えた場合とで、
+  // 2つの読み込みリクエストがほぼ同時に飛ぶことがある。ガード無しだと、後に送った方(切替後の
+  // 月)より先に送った方(今日の月)の応答が遅れて返ってきた際にカレンダーを上書きしてしまい、
+  // 月選択の表示とカレンダーの中身がズレる(2026-09-17、E2Eテストの実行で実際に再現した)。
+  // refreshCreateSlots/refreshEditSlotsと同じ考え方で、呼び出しごとに増分するトークンを持たせ、
+  // 自分より新しいリクエストが既に完了していれば結果を反映せずに捨てる。
+  let businessDaysRequestId = 0;
+
   async function loadBusinessDays() {
     const { dateFrom, dateTo, dates } = monthDateRange(el.shiftsMonth.value);
+    const requestId = ++businessDaysRequestId;
     el.businessDaysCalendar.innerHTML = '<p class="status-text">読み込み中…</p>';
     try {
       const data = await apiFetch('admin-business-days', `?date_from=${dateFrom}&date_to=${dateTo}`);
+      if (requestId !== businessDaysRequestId) return; // 自分より新しいリクエストが既に走っているので破棄
       businessDaysByDate = new Map((data.business_days ?? []).map((r) => [r.date, r]));
       renderBusinessDaysCalendar(dates);
     } catch (err) {
+      if (requestId !== businessDaysRequestId) return;
       el.businessDaysCalendar.innerHTML = `<p class="status-text">取得に失敗しました: ${escapeHtml(err.message)}</p>`;
     }
   }
@@ -1517,8 +1564,13 @@
   let staffShiftsByStaffDate = new Map();
   let currentShiftsDates = [];
 
+  // loadBusinessDays()と同じ理由(タブを開いた直後の自動読み込みと、その直後の月切り替えが
+  // 競合しうる)で、こちらにも同じリクエストトークンのガードを入れる。
+  let staffShiftsRequestId = 0;
+
   async function loadStaffShifts() {
     const { dateFrom, dateTo, dates } = monthDateRange(el.shiftsMonth.value);
+    const requestId = ++staffShiftsRequestId;
     currentShiftsDates = dates;
     el.staffShiftsCalendar.innerHTML = '<p class="status-text">読み込み中…</p>';
     try {
@@ -1526,6 +1578,7 @@
         apiFetch('admin-staff-shifts', `?date_from=${dateFrom}&date_to=${dateTo}`),
         loadStaffOptions(),
       ]);
+      if (requestId !== staffShiftsRequestId) return; // 自分より新しいリクエストが既に走っているので破棄
       staffShiftsByStaffDate = new Map((shiftsData.shifts ?? []).map((s) => [`${s.staff_id}_${s.date}`, s]));
 
       if (!staffList || staffList.length === 0) {
@@ -1540,6 +1593,7 @@
 
       renderStaffShiftsCalendar();
     } catch (err) {
+      if (requestId !== staffShiftsRequestId) return;
       el.staffShiftsCalendar.innerHTML = `<p class="status-text">取得に失敗しました: ${escapeHtml(err.message)}</p>`;
     }
   }

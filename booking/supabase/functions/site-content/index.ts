@@ -18,28 +18,34 @@ Deno.serve(async (req) => {
 
     const client = serviceClient();
 
-    const [{ data: features, error: featuresErr }, { data: photos, error: photosErr }, { data: staff, error: staffErr }] =
-      await Promise.all([
-        client
-          .from("site_features")
-          .select("title, description, sort_order")
-          .eq("is_active", true)
-          .order("sort_order", { ascending: true }),
-        client
-          .from("site_gallery_photos")
-          .select("kind, image_url, caption, sort_order")
-          .eq("is_active", true)
-          .order("sort_order", { ascending: true }),
-        client
-          .from("staff")
-          .select("name, name_en, bio_role_label, bio_comment, avatar_image_url")
-          .eq("is_active", true)
-          .order("display_order", { ascending: true }),
-      ]);
+    const [
+      { data: features, error: featuresErr },
+      { data: photos, error: photosErr },
+      { data: staff, error: staffErr },
+      { data: rating, error: ratingErr },
+    ] = await Promise.all([
+      client
+        .from("site_features")
+        .select("title, description, sort_order")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true }),
+      client
+        .from("site_gallery_photos")
+        .select("kind, image_url, caption, sort_order")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true }),
+      client
+        .from("staff")
+        .select("name, name_en, bio_role_label, bio_comment, avatar_image_url")
+        .eq("is_active", true)
+        .order("display_order", { ascending: true }),
+      client.from("site_rating").select("rating, review_count").eq("id", 1).maybeSingle(),
+    ]);
 
     if (featuresErr) throw new ApiError("INTERNAL_ERROR", "特徴カードの取得に失敗しました。");
     if (photosErr) throw new ApiError("INTERNAL_ERROR", "写真の取得に失敗しました。");
     if (staffErr) throw new ApiError("INTERNAL_ERROR", "スタッフ情報の取得に失敗しました。");
+    if (ratingErr) throw new ApiError("INTERNAL_ERROR", "評価情報の取得に失敗しました。");
 
     // kind='interior'が運用ミスで複数登録されても、LP表示は1件に絞る(sort_order最小の1件)。
     const interior = (photos ?? []).find((p) => p.kind === "interior") ?? null;
@@ -53,6 +59,7 @@ Deno.serve(async (req) => {
           styles: styles.map((s) => ({ image_url: s.image_url, caption: s.caption })),
         },
         staff: staff ?? [],
+        rating: rating ? { score: rating.rating, review_count: rating.review_count } : null,
       },
       { headers },
     );

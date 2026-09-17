@@ -100,6 +100,28 @@ async function run() {
     const staffRoleText = await page.locator('#staffGrid .staff-role').first().textContent();
     if (!staffRoleText.includes('理容歴4年')) failures.push(`STAFF: 肩書き(bio_role_label)が反映されていない: ${staffRoleText}`);
 
+    // 評価バッジ(★スコア・口コミ件数)は管理画面から手動更新される値(site_ratingテーブル)なので、
+    // 決め打ちの期待値ではなく、同じブラウザコンテキストから /site-content を直接叩いた結果と
+    // 突き合わせる方式で検証する(admin.e2e.mjs側の手動更新と値がズレても誤検知しないため)。
+    const apiRating = await page.evaluate(async () => {
+      const { SUPABASE_URL, ANON_KEY } = window.CITY_DOGS_CONFIG;
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/site-content`, {
+        headers: { Authorization: `Bearer ${ANON_KEY}` },
+      });
+      const data = await res.json();
+      return data.rating;
+    });
+    if (!apiRating || apiRating.score == null || apiRating.review_count == null) {
+      failures.push('評価バッジ: GET /site-contentのratingがnullで検証できない');
+    } else {
+      const expectedScore = Number(apiRating.score).toFixed(2);
+      const expectedCount = `(${apiRating.review_count}件の口コミ)`;
+      const scoreText = (await page.locator('#ratingScore').textContent()).trim();
+      const countText = (await page.locator('#ratingCount').textContent()).trim();
+      if (scoreText !== expectedScore) failures.push(`評価バッジ: スコア表示が一致しない(表示=${scoreText}, 期待=${expectedScore})`);
+      if (countText !== expectedCount) failures.push(`評価バッジ: 件数表示が一致しない(表示=${countText}, 期待=${expectedCount})`);
+    }
+
     if (consoleErrors.length > 0) {
       failures.push(`ブラウザコンソールエラーが発生: ${consoleErrors.join(' / ')}`);
     }

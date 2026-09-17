@@ -51,6 +51,14 @@
     }[c]));
   }
 
+  // bio_comment専用。全体はescapeHtmlした上で、改行表現として入力される<br>系タグだけを
+  // ホワイトリストで実タグに戻す(2026-09-17、コードレビューで発見・修正。管理画面の
+  // 紹介コメント欄は1行のテキスト入力で、スタッフは改行のために文字列として"<br>"を直接
+  // 入力する運用のため、単純な全エスケープにすると既存の改行表示が壊れる)。
+  function escapeHtmlAllowBr(str) {
+    return escapeHtml(str).replace(/&lt;br\s*\/?&gt;/gi, '<br>');
+  }
+
   function showLoadError(container, message) {
     container.innerHTML = `<p class="menu-note">${escapeHtml(message)}</p>`;
   }
@@ -120,33 +128,25 @@
           ? `<img src="${escapeHtml(s.avatar_image_url)}" alt="">`
           : AVATAR_PLACEHOLDER_SVG;
         const nameEn = s.name_en ? `<span>${escapeHtml(s.name_en)}</span>` : '';
-        // bio_commentは店舗スタッフが入力する想定のコンテンツ(顧客からの入力ではない)で、
-        // 改行表現のために<br>を許容している。将来、管理画面から自由入力できるようにする際は
-        // サニタイズ方針を再検討すること(現状はシードデータのみ)。
         return `
           <div class="staff-card reveal">
             <div class="staff-avatar" aria-hidden="true">${avatar}</div>
             <h3 class="staff-name">${escapeHtml(s.name)} ${nameEn}</h3>
             <p class="staff-role">${escapeHtml(s.bio_role_label ?? '')}</p>
-            <p class="staff-comment">${s.bio_comment ?? ''}</p>
+            <p class="staff-comment">${escapeHtmlAllowBr(s.bio_comment)}</p>
           </div>
         `;
       })
       .join('');
   }
 
-  // Google口コミ連携(2026-09-14、プレースホルダー実装)。GOOGLE_PLACES_API_KEY/GOOGLE_PLACE_IDの
-  // secretsが未設定の間はAPIが configured:false を返すので、その場合は現状のハードコード表示
-  // (HotPepperの数値)をそのまま残す。ここが失敗してもLPの他の部分には影響させない(fail-soft)。
-  async function updateGoogleRating() {
-    try {
-      const data = await apiGet('/google-rating', 0);
-      if (!data.configured || data.rating == null || data.review_count == null) return;
-      el.ratingScore.textContent = data.rating.toFixed(2);
-      el.ratingCount.textContent = `(${data.review_count}件の口コミ)`;
-    } catch {
-      // 失敗時は静的なプレースホルダー表示のまま(何もしない)。
-    }
+  // 評価バッジ(★スコア・口コミ件数)は管理画面から手動更新される数値(site_ratingテーブル)を
+  // そのまま表示するだけ。Google Places API連携は規約上のキャッシュ制限(rating/reviewsは自社DBに
+  // 保存できずlive取得必須)と衝突するため2026-09-17に撤回し、この方式に切り替えた。
+  function renderRating(rating) {
+    if (!rating || rating.score == null || rating.review_count == null) return;
+    el.ratingScore.textContent = Number(rating.score).toFixed(2);
+    el.ratingCount.textContent = `(${rating.review_count}件の口コミ)`;
   }
 
   async function init() {
@@ -158,6 +158,7 @@
       renderFeatures(siteContent.features);
       renderGallery(siteContent.gallery);
       renderStaff(siteContent.staff);
+      renderRating(siteContent.rating);
       renderMenus(menusRes.menus);
     } catch {
       const message = '読み込みに失敗しました。お手数ですが再読み込みしてください。';
@@ -169,7 +170,6 @@
       // 新しく追加された.reveal要素をscroll-reveal監視の対象に加える(script.js側で定義)。
       window.CityDogsObserveReveals?.();
     }
-    updateGoogleRating();
   }
 
   init();

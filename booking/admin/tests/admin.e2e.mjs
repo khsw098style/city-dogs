@@ -1,7 +1,7 @@
 // City Dogs 管理画面(admin/index.html)のE2Eテスト。
 // テスト用のSupabase Authユーザーを一時作成 → staffに紐付け → ログイン →
-// スケジュール/検索タブの表示確認 → LPコンテンツタブ(CONCEPT/SHOP&STYLE/MENU&PRICE/STAFF)の
-// 追加・編集・削除確認 → 電話予約の代理登録・ステータス変更・リスケジュール →
+// スケジュール/検索タブの表示確認 → LPコンテンツタブ(評価バッジ/CONCEPT/SHOP&STYLE/MENU&PRICE/STAFF)の
+// 編集・追加・削除確認 → 電話予約の代理登録・ステータス変更・リスケジュール →
 // 営業日・シフトタブ(一括生成→個別編集) → 顧客管理タブ(検索→編集→予約履歴確認) →
 // 後片付け、までこれ1本で完結する。
 //
@@ -24,6 +24,20 @@
 //
 // service_role キーはダッシュボード(Project Settings > API)から取得する。
 // 絶対にコードにハードコードしないこと(このファイルも含め)。
+//
+// ⚠️ Cloudflare Turnstile(2026-09-17、ログインフォームに導入)について: このテストは
+// lp/tests/reserve.e2e.mjsと全く同じ理由・同じ仕組みで、config.jsのTURNSTILE_SITE_KEYを
+// Cloudflare公式のテスト専用キー(常に成功する)に一時差し替えてから実行する(下記の
+// page.route参照。本番のconfig.jsファイル自体は書き換えない)。本番用のサイトキーだと
+// 実際にボット検知が働き、Playwrightのヘッドレスブラウザは正当にボットとして弾かれて
+// ログインすらできない(2026-09-17に実機で確認済み)。
+// **バックエンド側のTURNSTILE_SECRET_KEYが本番の実キーのままだと、テスト用のダミー
+// トークンは「本番鍵はテスト用トークンを拒否する」というCloudflareの仕様により拒否される**
+// ため、このテストを実行する前に、一時的に
+// `npx supabase secrets set TURNSTILE_SECRET_KEY="1x0000000000000000000000000000000AA"`
+// (Cloudflare公式のテスト専用シークレットキー、常に成功する)に切り替え、テスト終了後は
+// 必ず本番の実キーに戻すこと。戻し忘れると、本番のログインのTurnstile保護が効かなくなる
+// (誰のトークンでも通ってしまう)ので特に注意。
 
 import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
@@ -252,6 +266,16 @@ async function run() {
 
   await admin.from('staff').update({ auth_user_id: created.user.id }).eq('id', staffRow.id);
 
+  // 評価バッジ(site_rating)はTEST_*プレフィックスで分離できる他のLPコンテンツと違い、
+  // 常に1行だけしかない本番表示用の値そのものを書き換えることになる。auth_user_idの
+  // 復元と同じ考え方で、テスト前の値を保存しておきfinallyで必ず元に戻す。
+  const { data: originalRatingRow, error: originalRatingErr } = await admin
+    .from('site_rating')
+    .select('rating, review_count')
+    .eq('id', 1)
+    .single();
+  if (originalRatingErr) throw originalRatingErr;
+
   const server = spawn(`npx --yes serve -l ${PORT} .`, { cwd: adminRoot, shell: true, stdio: 'ignore' });
   let browser;
   let page;
@@ -271,11 +295,33 @@ async function run() {
     // このテストでは常に「OK」を選ぶ(このテストで開くダイアログは削除確認だけの想定)。
     page.on('dialog', (dialog) => dialog.accept());
 
+    // 本番用のTurnstileサイトキー(config.js)は実際のボット検知を行うため、Playwrightの
+    // ヘッドレスブラウザは正当にボットとして弾かれてしまい、トークンが永久に発行されない
+    // (lp/tests/reserve.e2e.mjsと同じ理由・同じ対策。ファイル冒頭の⚠️コメント参照)。
+    // Cloudflare公式のテスト専用サイトキー(常に成功する)に、このテスト実行時だけ
+    // 差し替える。本番のconfig.jsファイル自体は書き換えない。
+    const TEST_TURNSTILE_SITE_KEY = '1x00000000000000000000AA';
+    await page.route('**/js/config.js', async (route) => {
+      const realConfig = await fs.readFile(path.join(adminRoot, 'js', 'config.js'), 'utf8');
+      const testConfig = realConfig.replace(
+        /TURNSTILE_SITE_KEY:\s*'[^']*'/,
+        `TURNSTILE_SITE_KEY: '${TEST_TURNSTILE_SITE_KEY}'`,
+      );
+      await route.fulfill({ contentType: 'application/javascript; charset=utf-8', body: testConfig });
+    });
+
     console.log('2. ログイン...');
     await page.goto(`${BASE_URL}/index.html`);
     await page.waitForSelector('#loginForm');
     await page.fill('#loginEmail', TEST_EMAIL);
     await page.fill('#loginPassword', TEST_PASSWORD);
+    // Cloudflare Turnstileのトークン生成は非同期(テスト用サイトキーでは数秒で完了する)。
+    // 生成前にクリックすると「ロボットでないことの確認が完了していません」で弾かれるため、
+    // 固定waitではなくトークンが入るまで待つ(reserve.e2e.mjsと同じ理由)。
+    await page.waitForFunction(() => {
+      const input = document.querySelector('input[name="cf-turnstile-response"]');
+      return input && input.value;
+    }, { timeout: 15000 });
     await page.click('#loginSubmit');
     await page.waitForSelector('#appScreen:not([hidden])', { timeout: 10000 });
 
@@ -295,6 +341,29 @@ async function run() {
     console.log('5. LPコンテンツタブへ切り替え...');
     await page.click('.tab-btn[data-tab="content"]');
     await page.waitForSelector('#featureCards .content-card, #featureCards .status-text');
+
+    console.log('5.5. 評価バッジ(★スコア・口コミ件数): 編集→保存→ページ再読み込みで反映確認...');
+    await page.waitForFunction(() => document.getElementById('ratingScoreInput')?.value !== '', { timeout: 10000 });
+    const TEST_RATING_SCORE = '3.33';
+    const TEST_RATING_COUNT = '777';
+    await page.fill('#ratingScoreInput', TEST_RATING_SCORE);
+    await page.fill('#ratingCountInput', TEST_RATING_COUNT);
+    await page.click('#ratingForm button[type="submit"]');
+    await waitForLocatorText(page.locator('#ratingSaveStatus'), '保存しました');
+
+    // フォームの表示が変わっただけでなく、実際にDBへ保存されたかをページ再読み込み後の
+    // 再取得で確認する(楽観的なUI更新だけを見て「保存できた」と誤判定しないため)。
+    await page.reload();
+    await page.waitForSelector('#appScreen:not([hidden])', { timeout: 10000 });
+    await page.click('.tab-btn[data-tab="content"]');
+    await page.waitForSelector('#featureCards .content-card, #featureCards .status-text');
+    await page.waitForFunction(() => document.getElementById('ratingScoreInput')?.value !== '', { timeout: 10000 });
+    const reloadedScore = await page.inputValue('#ratingScoreInput');
+    const reloadedCount = await page.inputValue('#ratingCountInput');
+    if (Number(reloadedScore).toFixed(2) !== Number(TEST_RATING_SCORE).toFixed(2) || reloadedCount !== TEST_RATING_COUNT) {
+      throw new Error(`評価バッジの保存内容が再読み込み後に反映されていません: score="${reloadedScore}", count="${reloadedCount}"`);
+    }
+    console.log('   評価バッジの編集・保存・再読み込み後の反映を確認(元の値はfinallyで復元)');
 
     console.log('6. CONCEPT(特徴カード): 追加→編集→削除...');
     await page.fill('#featureAddTitle', TEST_FEATURE_TITLE);
@@ -613,17 +682,20 @@ async function run() {
     server.kill();
     killByPort(PORT);
 
-    console.log('15. 後片付け(LPコンテンツのテストデータ・テストユーザーの紐付け解除・削除)...');
+    console.log('15. 後片付け(LPコンテンツのテストデータ・評価バッジ・テストユーザーの紐付け解除・削除)...');
     // 電話予約の代理登録で作った予約(reservations)は片付けない(テストデータは
     // 納品前に一括クリアする運用のため、lp/tests/reserve.e2e.mjsと同じ方針)。
     // 特徴カード/写真はUI経由の削除テストで既に消えているはずだが、途中で失敗した場合の
     // 取りこぼしに備えて、menus/staffと合わせてここでも名前ベースで一括削除する(冪等)。
     await cleanupTestContentRows(admin);
+    // 評価バッジ(site_rating)はテスト値のまま残すと本番LPの表示を汚してしまうため、
+    // auth_user_idと同じ考え方でテスト実行前の値に戻す。
+    await admin.from('site_rating').update({ rating: originalRatingRow.rating, review_count: originalRatingRow.review_count }).eq('id', 1);
     // null固定ではなく、テスト実行前に読み取った値に戻す(実アカウントが
     // 紐付いていた場合はそれを保護するため)。
     await admin.from('staff').update({ auth_user_id: previousAuthUserId }).eq('id', staffRow.id);
     await admin.auth.admin.deleteUser(created.user.id);
-    console.log('   done (auth_user_idを実行前の状態', previousAuthUserId ? `(${previousAuthUserId})` : '(未設定)', 'に復元)');
+    console.log('   done (auth_user_idを実行前の状態', previousAuthUserId ? `(${previousAuthUserId})` : '(未設定)', 'に復元、評価バッジも実行前の値に復元)');
   }
 }
 

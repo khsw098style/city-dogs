@@ -19,8 +19,7 @@
 |---|---|---|
 | GET | `/menus` | 有効なメニュー一覧(LPの「MENU & PRICE」表示にもそのまま使う) |
 | GET | `/staff` | 指名可能なスタッフ一覧(`role != 'assistant'`かつ稼働中)。予約UIのリストボックス用。**LPの「STAFF」紹介セクションとは別エンドポイント**(下記`/site-content`参照。予約用途と紹介用途を混同しない) |
-| GET | `/site-content` | LPの「CONCEPT」「SHOP & STYLE」「STAFF」セクション用の表示データを1回で返す(2026-09-13実装・デプロイ済み) |
-| GET | `/google-rating` | LPヒーローの評価バッジ(★スコア・口コミ件数)用。`GOOGLE_PLACES_API_KEY`/`GOOGLE_PLACE_ID`未設定時は`configured:false`を返すプレースホルダー実装(2026-09-14)。詳細は下記「Google口コミ連携」参照 |
+| GET | `/site-content` | LPの「CONCEPT」「SHOP & STYLE」「STAFF」セクションと評価バッジ(★スコア・口コミ件数)用の表示データを1回で返す(2026-09-13実装・デプロイ済み、評価バッジは2026-09-17追加) |
 | GET | `/availability` | 指定日・メニュー(・任意でスタイリスト指名)の空き枠一覧 |
 | POST | `/reservations` | Web予約の新規作成。`customer.email`必須(確認・変更・キャンセル用リンクの送信先) |
 | GET | `/reservations/lookup` | 電話番号+予約番号で自分の予約を照会 |
@@ -44,6 +43,7 @@
 | GET/POST/PATCH/DELETE | `/admin/site-content/features` | LP「CONCEPT」カードのCRUD | (該当なし。LP専用) | ✅実装・デプロイ済み(2026-09-13) |
 | GET/POST/PATCH/DELETE | `/admin/site-content/gallery` | LP「SHOP & STYLE」写真のCRUD(`image_url`は当面テキスト入力。アップロード機能は未実装) | (該当なし。LP専用) | ✅実装・デプロイ済み(2026-09-13) |
 | GET/POST/PATCH/DELETE | `/admin/site-content/staff` | スタッフの追加・更新・削除(氏名/権限区分/稼働状況/表示順の業務項目と、`name_en`/`bio_role_label`/`bio_comment`/`avatar_image_url`のLP紹介文を同じリソースとして扱う)。予約実績が一度でもあると`reservations.staff_id`の外部キー制約で削除できず`VALIDATION_ERROR`を返す。その場合は`is_active=false`で退職等を表現 | 掲載管理(スタッフ) | ✅実装・デプロイ済み(2026-09-13、DELETE追加は2026-09-16) |
+| GET/PUT | `/admin/site-content/rating` | LPヒーローの評価バッジ(★スコア0〜5・口コミ件数)を手動更新。`site_rating`テーブル(1行のみ、作成・削除なし) | 掲載管理(評価バッジ) | ✅実装・デプロイ済み(2026-09-17。Google Places API連携の撤回に伴う代替実装) |
 
 **実装上の注記**: Supabase Edge Functionsの関数名にはスラッシュを含められないため、`/admin/reservations`系のエンドポイントは実際には1つの関数 `admin-reservations` としてデプロイし、`公開API(reservations)`と同じ要領でパス末尾を自前でサブルーティングしている(`supabase/functions/admin-reservations/`)。今後 `/admin/business-days` 等を実装する際も同様に、リソース単位で1関数にまとめる方針。
 
@@ -144,10 +144,13 @@ LPのCONCEPT/SHOP & STYLE/STAFFセクションを描画するための表示デ�
       "bio_comment": "「フェードでピシッと!!!!」…",
       "avatar_image_url": null
     }
-  ]
+  ],
+  "rating": { "score": 4.88, "review_count": 11 }
 }
 ```
 `is_active=false`の行、`kind='interior'`で2件目以降の行は除外して返す(管理画面側の運用ミスがLP表示に影響しないようにサーバー側で1件に絞る)。`avatar_image_url`が`null`の場合、LP側は現行のSVGプレースホルダーを表示する。
+
+`rating`はLPヒーローの評価バッジ(★スコア・口コミ件数)用。`site_rating`テーブル(1行のみ)から取得し、`GET/PUT /admin/site-content/rating`(下記)で管理画面から手動更新する。2026-09-14〜17にGoogle Places APIとの自動連携を実装・本番稼働までさせたが、rating/reviews等のPlaceデータは自社DBへのキャッシュ・保存自体がGoogle Maps Platformの利用規約に抵触する可能性が高いと判明し撤回した(詳細はCLAUDE.mdの「Google口コミ連携」参照)。
 
 ### POST /admin/reservations(2026-09-14実装・デプロイ済み)
 
@@ -260,15 +263,11 @@ MVPでは Web予約を `tentative` を経由せずいきなり `confirmed` に�
 - スタッフの当日シフトが「休み」に変更された場合の既存予約 → 自動キャンセルはせず、管理画面にアラート表示して人間が判断する(自動キャンセルは事故のもと)
 - タイムゾーン → すべて`timestamptz`で保持し、表示側でJSTに変換する。サーバー側の比較・計算はUTCで統一
 
-### GET /google-rating(2026-09-14実装・デプロイ済み、プレースホルダー状態)
+### Google口コミ連携(GET /google-rating) — 実装・本番稼働後に撤回(2026-09-14実装、2026-09-17撤回)
 
-LPヒーローセクションの「★★★★★ 4.88(11件の口コミ)」バッジ用。元々はHotPepperの表示を手動でコピーしたハードコード値だったが、HotPepper解約も見据えてGoogle口コミに切り替えられるよう配線だけ先に用意した。
+LPヒーローセクションの「★★★★★ 4.88(11件の口コミ)」バッジをGoogle Places API(New)から自動取得する連携を実装し、2026-09-17には実際にsecretsを設定して本番稼働までさせた。しかしその後、Google Maps Platformの利用規約を確認したところ、`rating`/`reviews`等のPlaceデータは自社DBへのキャッシュ・保存自体が規約違反の可能性が高い(`place_id`は無期限保存可、緯度経度は30日まで可、だがrating/reviews/name/photos/phone numbersは「request it live, display it, do not warehouse it」)と判明。一方で規約通りに都度ライブ取得すると無料枠(月1,000回)を簡単に超える(1日あたり平均33回のアクセスで枠を使い切る計算)ため、規約遵守とコスト管理が両立せず、**連携自体を撤回した**。
 
-- `GOOGLE_PLACES_API_KEY` / `GOOGLE_PLACE_ID` のsecretsが未設定の間は `{ configured: false, rating: null, review_count: null }` を返すのみ。LP側(`site-content.js`の`updateGoogleRating()`)はこれを見て何もせず、`index.html`にハードコードされた現状の数値表示をそのまま残す(fail-soft)。
-- 両方のsecretsを設定すれば、コード変更なしにGoogle Places API(New)から実際の`rating`/`userRatingCount`を取得してLP表示が切り替わる。
-- **コスト上の注意**: `rating`/`userRatingCount`フィールドはGoogle Places API(New)の課金区分の中で最も高い「Enterprise SKU」に属し、無料枠も月1,000回と少ない(2026-09-14時点でWeb検索して確認。詳細は`developers.google.com/maps/billing-and-pricing/pricing`を参照)。そのため`google_rating_cache`テーブル(1行のみ)に24時間キャッシュし、実際にGoogle APIを呼ぶのは1日1回程度に抑える設計にしている(`CACHE_TTL_MS`)。Google側の障害・レート制限時は古いキャッシュ値にフォールバックする。
-- Google Cloud側の準備(プロジェクト作成・Places API有効化・請求先/クレジットカード登録・APIキー発行・Place ID特定)はユーザー側で対応が必要(代行不可)。準備ができたら`npx supabase secrets set GOOGLE_PLACES_API_KEY=... GOOGLE_PLACE_ID=...`を実行するだけで有効化される
-- 実装未確認事項: Google Place情報を公開表示する際の帰属表示(アトリビューション)要件を満たしているか、実際にsecretsを設定して検証する際に確認すること
+`GET /google-rating` Edge Function・`google_rating_cache`テーブルは物理削除済み(`0009_site_rating.sql`)。代替として、評価スコア・口コミ件数は`GET /site-content`の`rating`フィールド(`site_rating`テーブル、1行のみ)から返し、`GET/PUT /admin/site-content/rating`で管理画面から手動更新する方式に変更した(上記`GET /site-content`・下記エンドポイント一覧参照)。
 
 ## 未決事項
 

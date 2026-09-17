@@ -5,6 +5,7 @@
 //   PATCH/DELETE         /admin/site-content/gallery/:id  -> updateGalleryPhoto / deleteGalleryPhoto
 //   GET/POST            /admin/site-content/staff         -> listStaffBios / createStaff
 //   PATCH/DELETE         /admin/site-content/staff/:id    -> updateStaffBio(業務項目+LP紹介文の両方) / deleteStaff
+//   GET/PUT             /admin/site-content/rating        -> getRating / updateRating(★評価バッジの手動更新)
 //
 // 実際のデプロイ先はSupabase Edge Functionsの仕様上 `admin-site-content` という1つの
 // 関数名になる(admin-reservationsと同じ方式)。MENU & PRICEの編集(/admin/menus)は
@@ -17,6 +18,7 @@ import { requireStaff } from "../_shared/auth.ts";
 import { createFeature, deleteFeature, listFeatures, updateFeature } from "./features.ts";
 import { createGalleryPhoto, deleteGalleryPhoto, listGalleryPhotos, updateGalleryPhoto } from "./gallery.ts";
 import { createStaff, deleteStaff, listStaffBios, updateStaffBio } from "./staff.ts";
+import { getRating, updateRating } from "./rating.ts";
 
 Deno.serve(async (req) => {
   const preflight = handlePreflight(req);
@@ -53,6 +55,11 @@ Deno.serve(async (req) => {
       if (req.method === "POST" && !resourceId) return await createStaff(req, client, headers);
       if (req.method === "PATCH" && resourceId) return await updateStaffBio(resourceId, req, client, headers);
       if (req.method === "DELETE" && resourceId) return await deleteStaff(resourceId, client, headers);
+    }
+
+    if (resource === "rating" && !resourceId) {
+      if (req.method === "GET") return await getRating(client, headers);
+      if (req.method === "PUT") return await updateRating(req, client, headers);
     }
 
     throw new ApiError("NOT_FOUND", "対応していないエンドポイントです。");

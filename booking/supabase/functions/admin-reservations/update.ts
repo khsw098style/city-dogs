@@ -103,10 +103,15 @@ export async function updateReservation(
     throw new ApiError("VALIDATION_ERROR", "status または staff_id/start_at のいずれかを指定してください。");
   }
 
+  // SELECTで読んだ時点のstatusを条件に付け、原子的に判定する(SELECTとUPDATEの間に
+  // 別リクエスト(顧客によるキャンセル等)がstatusを変えている可能性があるため。
+  // 2026-09-17、コードレビューで発見・修正)。直前のSELECTで存在確認済みのため、
+  // ここで0件になるのは実質的に競合のみ(削除エンドポイントは存在しないため)。
   const { data: updated, error: updateErr } = await client
     .from("reservations")
     .update(patch)
     .eq("id", id)
+    .eq("status", current.status as string)
     .select("id, reservation_number, status, staff_id, time_range, cancel_reason")
     .maybeSingle();
 
@@ -117,7 +122,9 @@ export async function updateReservation(
     console.error("admin reservation update failed:", updateErr);
     throw new ApiError("INTERNAL_ERROR", "予約の更新に失敗しました。");
   }
-  if (!updated) throw new ApiError("NOT_FOUND", "指定された予約が見つかりません。");
+  if (!updated) {
+    throw new ApiError("INVALID_STATUS_TRANSITION", "予約の状態が変更されています。画面を更新してもう一度お試しください。");
+  }
 
   const range = parseTstzRange(updated.time_range as unknown as string);
   return jsonResponse(

@@ -64,11 +64,14 @@ export async function createAdminReservation(
   }
 
   const endAt = new Date(startAt.getTime() + availability.menu.duration_minutes * 60 * 1000);
+  // スタッフが電話口で本人確認した上での代理登録なので、既存顧客の氏名・emailの
+  // 上書きを許可する(公開予約側との違いは_shared/customers.tsのコメント参照)。
   const customerId = await upsertCustomerByPhone(client, {
     name,
     nameKana: body.customer?.name_kana ?? null,
     phone,
     email,
+    allowOverwrite: true,
   });
 
   const { data: reservation, error: insertErr } = await client
