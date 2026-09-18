@@ -26,18 +26,19 @@
 // 絶対にコードにハードコードしないこと(このファイルも含め)。
 //
 // ⚠️ Cloudflare Turnstile(2026-09-17、ログインフォームに導入)について: このテストは
-// lp/tests/reserve.e2e.mjsと全く同じ理由・同じ仕組みで、config.jsのTURNSTILE_SITE_KEYを
-// Cloudflare公式のテスト専用キー(常に成功する)に一時差し替えてから実行する(下記の
-// page.route参照。本番のconfig.jsファイル自体は書き換えない)。本番用のサイトキーだと
-// 実際にボット検知が働き、Playwrightのヘッドレスブラウザは正当にボットとして弾かれて
-// ログインすらできない(2026-09-17に実機で確認済み)。
-// **バックエンド側のTURNSTILE_SECRET_KEYが本番の実キーのままだと、テスト用のダミー
-// トークンは「本番鍵はテスト用トークンを拒否する」というCloudflareの仕様により拒否される**
-// ため、このテストを実行する前に、一時的に
-// `npx supabase secrets set TURNSTILE_SECRET_KEY="1x0000000000000000000000000000000AA"`
-// (Cloudflare公式のテスト専用シークレットキー、常に成功する)に切り替え、テスト終了後は
-// 必ず本番の実キーに戻すこと。戻し忘れると、本番のログインのTurnstile保護が効かなくなる
-// (誰のトークンでも通ってしまう)ので特に注意。
+// lp/tests/reserve.e2e.mjsと同じ理由で、config.jsのTURNSTILE_SITE_KEYをCloudflare公式の
+// テスト専用キー(常に成功する)に一時差し替えてから実行する(下記のpage.route参照。
+// 本番のconfig.jsファイル自体は書き換えない)。本番用のサイトキーだと実際にボット検知が
+// 働き、Playwrightのヘッドレスブラウザは正当にボットとして弾かれてログインすらできない
+// (2026-09-17に実機で確認済み)。
+//
+// 【2026-09-18訂正】ログインは`client.auth.signInWithPassword({ options: { captchaToken } })`
+// でSupabase Auth自体(GoTrue)がトークンを検証する経路であり、`POST /reservations`が使う
+// 私たち自身のEdge Function側`_shared/turnstile.ts`/`TURNSTILE_SECRET_KEY`は一切通らない
+// (reserve.e2e.mjsとは検証経路が異なる、別物)。ログイン側のテスト専用キー切り替えは
+// Supabaseダッシュボードの「Authentication > Attack Protection」設定で行うものであり、
+// `npx supabase secrets set TURNSTILE_SECRET_KEY=...`はここには一切効果が無い
+// (以前の版ではreserve.e2e.mjsと同じ手順が必要であるかのように書いていたが誤り)。
 
 import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
@@ -241,50 +242,64 @@ async function run() {
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-  console.log('0. 前回実行の残骸を掃除(念のため)...');
-  await cleanupTestContentRows(admin);
-
-  console.log('1. テスト用Authユーザーを作成し、スタッフに紐付け...');
-  const { data: created, error: createErr } = await admin.auth.admin.createUser({
-    email: TEST_EMAIL,
-    password: TEST_PASSWORD,
-    email_confirm: true,
-  });
-  if (createErr) throw createErr;
-
-  // 紐付け前の auth_user_id を必ず保存しておく。実際のオーナーアカウント等が
-  // 既に紐付いている状態でこのテストを実行すると、後片付けで無条件にnullへ戻して
-  // しまい、本物のログインを壊すという事故が過去に発生した。テスト前の状態への
-  // 復元(null固定ではなく)を徹底することで再発を防ぐ。
-  const { data: staffRow, error: staffFindErr } = await admin
-    .from('staff')
-    .select('id, name, auth_user_id')
-    .eq('name', TEST_STAFF_NAME)
-    .single();
-  if (staffFindErr) throw staffFindErr;
-  const previousAuthUserId = staffRow.auth_user_id;
-
-  await admin.from('staff').update({ auth_user_id: created.user.id }).eq('id', staffRow.id);
-
-  // 評価バッジ(site_rating)はTEST_*プレフィックスで分離できる他のLPコンテンツと違い、
-  // 常に1行だけしかない本番表示用の値そのものを書き換えることになる。auth_user_idの
-  // 復元と同じ考え方で、テスト前の値を保存しておきfinallyで必ず元に戻す。
-  const { data: originalRatingRow, error: originalRatingErr } = await admin
-    .from('site_rating')
-    .select('rating, review_count')
-    .eq('id', 1)
-    .single();
-  if (originalRatingErr) throw originalRatingErr;
-
-  const server = spawn(`npx --yes serve -l ${PORT} .`, { cwd: adminRoot, shell: true, stdio: 'ignore' });
+  let server;
   let browser;
   let page;
+  const consoleErrors = [];
   // tryブロックの中でconst/letで宣言すると、途中で例外が起きてfinallyに抜けたときに
   // 参照できない(ブロックスコープが別)。失敗時こそブラウザ側のエラーや画面の状態を
   // 確認したいので、finallyからも見えるようtryの外で宣言しておく。
-  const consoleErrors = [];
+  // 2026-09-18: 元々はtryの開始位置がAuthユーザー作成・スタッフ紐付けより後ろにあり、
+  // その区間で例外が起きるとfinally自体を通らず後片付けが一切行われない不具合があった
+  // (実機で発覚: スタッフ名の不一致でここが例外を投げ、作成済みのテスト用Authユーザーが
+  // 後片付けされずに残留。次回実行時に「すでに登録済み」で連鎖的に失敗した)。
+  // これらの変数もtryの外で宣言し、セットアップ段階の失敗もfinallyで必ず後片付けできるようにする。
+  let created;
+  let staffRow;
+  let previousAuthUserId;
+  let originalRatingRow;
 
   try {
+    console.log('0. 前回実行の残骸を掃除(念のため)...');
+    await cleanupTestContentRows(admin);
+
+    console.log('1. テスト用Authユーザーを作成し、スタッフに紐付け...');
+    const { data: createdUser, error: createErr } = await admin.auth.admin.createUser({
+      email: TEST_EMAIL,
+      password: TEST_PASSWORD,
+      email_confirm: true,
+    });
+    if (createErr) throw createErr;
+    created = createdUser;
+
+    // 紐付け前の auth_user_id を必ず保存しておく。実際のオーナーアカウント等が
+    // 既に紐付いている状態でこのテストを実行すると、後片付けで無条件にnullへ戻して
+    // しまい、本物のログインを壊すという事故が過去に発生した。テスト前の状態への
+    // 復元(null固定ではなく)を徹底することで再発を防ぐ。
+    const { data: staffRowResult, error: staffFindErr } = await admin
+      .from('staff')
+      .select('id, name, auth_user_id')
+      .eq('name', TEST_STAFF_NAME)
+      .single();
+    if (staffFindErr) throw staffFindErr;
+    staffRow = staffRowResult;
+    previousAuthUserId = staffRow.auth_user_id;
+
+    await admin.from('staff').update({ auth_user_id: created.user.id }).eq('id', staffRow.id);
+
+    // 評価バッジ(site_rating)はTEST_*プレフィックスで分離できる他のLPコンテンツと違い、
+    // 常に1行だけしかない本番表示用の値そのものを書き換えることになる。auth_user_idの
+    // 復元と同じ考え方で、テスト前の値を保存しておきfinallyで必ず元に戻す。
+    const { data: originalRatingRowResult, error: originalRatingErr } = await admin
+      .from('site_rating')
+      .select('rating, review_count')
+      .eq('id', 1)
+      .single();
+    if (originalRatingErr) throw originalRatingErr;
+    originalRatingRow = originalRatingRowResult;
+
+    server = spawn(`npx --yes serve -l ${PORT} .`, { cwd: adminRoot, shell: true, stdio: 'ignore' });
+
     await waitForServer(`${BASE_URL}/index.html`);
 
     browser = await chromium.launch();
@@ -366,6 +381,9 @@ async function run() {
     console.log('   評価バッジの編集・保存・再読み込み後の反映を確認(元の値はfinallyで復元)');
 
     console.log('6. CONCEPT(特徴カード): 追加→編集→削除...');
+    // 新規登録欄は2026-09-18から<details>で折りたたみ式(デフォルト閉)になったため、
+    // 中の入力欄を操作する前に必ず開く。
+    await page.click('#featureAddSection summary');
     await page.fill('#featureAddTitle', TEST_FEATURE_TITLE);
     await page.fill('#featureAddDescription', 'E2Eテストで自動作成された特徴カードです。');
     await page.fill('#featureAddSort', '999'); // 末尾に来るようにして、追加した行を確実に特定できるようにする
@@ -387,8 +405,12 @@ async function run() {
     console.log('   特徴カードの追加・編集・削除を確認');
 
     console.log('7. SHOP & STYLE(写真): 追加→編集→削除...');
+    await page.click('#galleryAddSection summary');
     await page.selectOption('#galleryAddKind', 'style'); // 'interior'は表示上1枚しか使われないため、既存の店内写真と衝突しないよう'style'を使う
-    await page.fill('#galleryAddUrl', 'images/e2e-test-placeholder.jpg');
+    // #galleryAddUrlは2026-09-18の画像アップロード機能追加によりtype="hidden"になった
+    // (通常はファイル選択→アップロード→自動反映される)。このテストはCRUD自体の確認が
+    // 目的でアップロード機能自体は対象外のため、アップロード後を模してJSで直接値を入れる。
+    await page.locator('#galleryAddUrl').evaluate((el) => { el.value = 'images/e2e-test-placeholder.jpg'; });
     await page.fill('#galleryAddCaption', TEST_GALLERY_CAPTION);
     await page.fill('#galleryAddSort', '999');
     await page.click('#galleryAddForm button[type="submit"]');
@@ -402,6 +424,7 @@ async function run() {
     console.log('   写真の追加・編集・削除を確認');
 
     console.log('8. MENU & PRICE(メニュー): 追加→編集→削除...');
+    await page.click('#menuAddSection summary');
     await page.fill('#menuAddName', TEST_MENU_NAME);
     await page.fill('#menuAddPrice', '1234');
     await page.fill('#menuAddDuration', '30');
@@ -420,6 +443,7 @@ async function run() {
     console.log('   メニューの追加・編集・削除を確認');
 
     console.log('9. STAFF(スタッフ管理・紹介文): 追加→編集→削除...');
+    await page.click('#staffAddSection summary');
     await page.fill('#staffAddName', TEST_STAFF_BIO_NAME);
     await page.selectOption('#staffAddRole', 'assistant'); // 予約指名リストを汚さないようassistantで追加
     await page.click('#staffAddForm button[type="submit"]');
@@ -441,6 +465,12 @@ async function run() {
 
     const menuValues = await waitForRealOptions(page.locator('#crMenu'));
     await page.selectOption('#crMenu', menuValues[0]);
+
+    // 「指名なし」は2026-09-18に廃止し、担当スタイリストの選択が必須になった。
+    // 選択しないと空き枠自体が取得されない(#crSlotが「担当スタイリストを選択すると
+    // 表示されます」のままになる)。
+    const createStaffValues = await waitForRealOptions(page.locator('#crStaff'));
+    await page.selectOption('#crStaff', createStaffValues[0]);
 
     const createDate = formatDateLocal(addDaysLocal(new Date(), 14));
     await page.fill('#crDate', createDate);
@@ -661,6 +691,36 @@ async function run() {
       throw new Error(`顧客の予約履歴に代理登録した予約(${createdReservation.reservation_number})が見つかりません: ${historyText}`);
     }
     console.log('   顧客検索・編集(メモ・要注意フラグ)・予約履歴表示を確認');
+
+    console.log('15. 売上予定・実績タブ: 表示確認...');
+    // 「読み込み中…」も完了後の「スタッフが登録されていません」等のエラー表示も同じ
+    // .status-textクラスを使っているため、.staff-columnとの二択待ち(waitForSelector)では
+    // 「読み込み中…」自体にマッチして非同期処理の完了を待たずに次へ進んでしまう
+    // (実機で発覚。他の箇所の同種のパターンも潜在的に同じ弱点を抱えている可能性がある)。
+    // 「読み込み中…」という文言が消えるまでポーリングする方式にする。
+    async function waitForRevenueLoaded() {
+      await page.waitForFunction(
+        () => !document.getElementById('revenueArea')?.textContent.includes('読み込み中'),
+        { timeout: 15000 },
+      );
+    }
+
+    await page.click('.tab-btn[data-tab="revenue"]');
+    await waitForRevenueLoaded();
+    const revenueColumnCount = await page.locator('#revenueArea .staff-column').count();
+    if (revenueColumnCount === 0) {
+      const areaText = await page.locator('#revenueArea').innerText().catch(() => '(取得失敗)');
+      throw new Error(`売上予定・実績タブにスタッフの列が1つも表示されていません。実際の表示="${areaText}"`);
+    }
+    // 手順10で代理登録した予約(createDate)の月に切り替え、見込み件数が
+    // その分だけ増えている(0件のままではない)ことを確認する。
+    await page.fill('#revenueMonth', createDate.slice(0, 7));
+    await waitForRevenueLoaded();
+    const forecastCountText = await page.locator('#revenueTotal .revenue-block').first().locator('.revenue-count').innerText();
+    if (!(parseInt(forecastCountText, 10) >= 1)) {
+      throw new Error(`代理予約作成後の月次見込み件数が0件のままです(表示="${forecastCountText}")。`);
+    }
+    console.log('   売上予定・実績タブの表示、および代理予約が見込み件数に反映されることを確認');
   } finally {
     // 途中で例外が起きて finally に来た場合でも、ブラウザ側のコンソールエラー・
     // 未捕捉例外(pageerror)は原因調査に重要な手がかりになるため、成功/失敗を問わず
@@ -679,22 +739,31 @@ async function run() {
       await page.screenshot({ path: path.join(shotDir, 'failure.png'), fullPage: true }).catch(() => {});
     }
     if (browser) await browser.close();
-    server.kill();
+    if (server) server.kill();
     killByPort(PORT);
 
-    console.log('15. 後片付け(LPコンテンツのテストデータ・評価バッジ・テストユーザーの紐付け解除・削除)...');
+    console.log('16. 後片付け(LPコンテンツのテストデータ・評価バッジ・テストユーザーの紐付け解除・削除)...');
     // 電話予約の代理登録で作った予約(reservations)は片付けない(テストデータは
     // 納品前に一括クリアする運用のため、lp/tests/reserve.e2e.mjsと同じ方針)。
     // 特徴カード/写真はUI経由の削除テストで既に消えているはずだが、途中で失敗した場合の
     // 取りこぼしに備えて、menus/staffと合わせてここでも名前ベースで一括削除する(冪等)。
     await cleanupTestContentRows(admin);
-    // 評価バッジ(site_rating)はテスト値のまま残すと本番LPの表示を汚してしまうため、
-    // auth_user_idと同じ考え方でテスト実行前の値に戻す。
-    await admin.from('site_rating').update({ rating: originalRatingRow.rating, review_count: originalRatingRow.review_count }).eq('id', 1);
-    // null固定ではなく、テスト実行前に読み取った値に戻す(実アカウントが
-    // 紐付いていた場合はそれを保護するため)。
-    await admin.from('staff').update({ auth_user_id: previousAuthUserId }).eq('id', staffRow.id);
-    await admin.auth.admin.deleteUser(created.user.id);
+    // 以下はすべて、対応するセットアップ処理が実際に完了していた場合のみ後片付けする
+    // (2026-09-18: セットアップ途中の例外でもここまで来るようになったため、
+    // どこまで進んでいたか分からない状態でも安全に後片付けできるようガードを追加)。
+    if (originalRatingRow) {
+      // 評価バッジ(site_rating)はテスト値のまま残すと本番LPの表示を汚してしまうため、
+      // auth_user_idと同じ考え方でテスト実行前の値に戻す。
+      await admin.from('site_rating').update({ rating: originalRatingRow.rating, review_count: originalRatingRow.review_count }).eq('id', 1);
+    }
+    if (staffRow) {
+      // null固定ではなく、テスト実行前に読み取った値に戻す(実アカウントが
+      // 紐付いていた場合はそれを保護するため)。
+      await admin.from('staff').update({ auth_user_id: previousAuthUserId }).eq('id', staffRow.id);
+    }
+    if (created) {
+      await admin.auth.admin.deleteUser(created.user.id);
+    }
     console.log('   done (auth_user_idを実行前の状態', previousAuthUserId ? `(${previousAuthUserId})` : '(未設定)', 'に復元、評価バッジも実行前の値に復元)');
   }
 }

@@ -130,7 +130,7 @@ async function run() {
     await page.click('#toStep2');
     await page.waitForSelector('#stepDatetime.is-active');
 
-    // STEP 2: 担当スタイリストを明示的に指名する(「指名なし」以外の先頭オプションを選ぶ)。
+    // STEP 2: 担当スタイリストを指名する(先頭の実オプションを選ぶ。2026-09-18〜指名は必須)。
     // これにより GET /availability?staff_id=... と POST /reservations の staff_id 連携を確認する。
     await page.waitForFunction(() => document.querySelectorAll('#staffSelect option').length > 1, { timeout: 10000 });
     await page.selectOption('#staffSelect', { index: 1 });

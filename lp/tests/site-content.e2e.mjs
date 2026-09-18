@@ -81,12 +81,31 @@ async function run() {
     const featureCount = await page.locator('#featureGrid .feature-card').count();
     if (featureCount !== 3) failures.push(`CONCEPT: 期待した特徴カード数(3)と異なる: ${featureCount}`);
 
+    // 写真は管理画面からのアップロード機能(2026-09-18追加)で差し替えられるため、
+    // 「特定のファイル名を含むはず」という決め打ちの検証はもう成立しない
+    // (実際にテスト中の画像アップロードで本番の店内写真データが差し替わり、
+    // 決め打ちだったこの検証が壊れるという実害が出た)。評価バッジの検証と同じ考え方で、
+    // 同じブラウザコンテキストから /site-content を直接叩いた結果と突き合わせる。
+    const apiGallery = await page.evaluate(async () => {
+      const { SUPABASE_URL, ANON_KEY } = window.CITY_DOGS_CONFIG;
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/site-content`, {
+        headers: { Authorization: `Bearer ${ANON_KEY}` },
+      });
+      const data = await res.json();
+      return data.gallery;
+    });
+
     const interiorImgSrc = await page.locator('#interiorPhoto img').getAttribute('src').catch(() => null);
-    if (!interiorImgSrc || !interiorImgSrc.includes('interior-chair.jpg')) {
-      failures.push(`SHOP & STYLE: 店内写真が想定通り描画されていない(src=${interiorImgSrc})`);
+    if (!apiGallery?.interior?.image_url) {
+      failures.push('SHOP & STYLE: GET /site-contentのgallery.interiorが取得できない');
+    } else if (interiorImgSrc !== apiGallery.interior.image_url) {
+      failures.push(`SHOP & STYLE: 店内写真のsrcがAPIレスポンスと一致しない(表示=${interiorImgSrc}, API=${apiGallery.interior.image_url})`);
     }
     const styleCount = await page.locator('#styleGrid .style-card').count();
-    if (styleCount !== 3) failures.push(`SHOP & STYLE: 期待したスタイル写真数(3)と異なる: ${styleCount}`);
+    const expectedStyleCount = apiGallery?.styles?.length;
+    if (styleCount !== expectedStyleCount) {
+      failures.push(`SHOP & STYLE: スタイル写真数がAPIレスポンスと一致しない(表示=${styleCount}, API=${expectedStyleCount})`);
+    }
 
     const menuCount = await page.locator('#menuList .menu-item').count();
     if (menuCount !== 4) failures.push(`MENU & PRICE: 期待したメニュー数(4)と異なる: ${menuCount}`);

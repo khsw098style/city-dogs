@@ -48,7 +48,7 @@
 - [ ] `RESEND_API_KEY="<Resendダッシュボードで発行したAPIキー>"`
 - [ ] `MANAGE_PAGE_BASE_URL="https://<LPの本番ドメイン>/manage.html"`
 - [ ] `RESEND_FROM_ADDRESS="<新店舗名> <no-reply@新店舗ドメイン>"`(独自ドメインをResend側で検証済みであること)
-- [ ] `TURNSTILE_SECRET_KEY="<Cloudflare Turnstileダッシュボードで発行したシークレットキー>"`(未設定の間はfail-openで検証がスキップされるだけなので、設定し忘れると気づきにくい。本番公開前に必ず設定すること)。**本番の実キーを設定すると、`lp/tests/reserve.e2e.mjs`・`booking/admin/tests/admin.e2e.mjs`(2026-09-17にログインフォームにもTurnstileを追加)を実行する前に一時的にテスト用シークレットキー(`1x0000000000000000000000000000000AA`)へ戻す必要がある**(テスト用サイトキーが発行するダミートークンは本番の実キーでは拒否される仕様のため)。テスト実行後は本番キーに戻し忘れないこと。詳細は各テストファイル冒頭のコメントとCHANGELOG.mdを参照
+- [ ] `TURNSTILE_SECRET_KEY="<Cloudflare Turnstileダッシュボードで発行したシークレットキー>"`(未設定の間はfail-openで検証がスキップされるだけなので、設定し忘れると気づきにくい。本番公開前に必ず設定すること)。**本番の実キーを設定すると、`lp/tests/reserve.e2e.mjs`(`POST /reservations`が私たち自身の`_shared/turnstile.ts`でこのsecretを検証するため)を実行する前に一時的にテスト用シークレットキー(`1x0000000000000000000000000000000AA`)へ戻す必要がある**(テスト用サイトキーが発行するダミートークンは本番の実キーでは拒否される仕様のため)。テスト実行後は本番キーに戻し忘れないこと。**`booking/admin/tests/admin.e2e.mjs`のログインは`TURNSTILE_SECRET_KEY`とは無関係**(Supabase Auth自体の「Attack Protection」captchaを使う別経路のため、この設定を切り替えても効果はない。2026-09-18訂正)。詳細は各テストファイル冒頭のコメントとCHANGELOG.mdを参照
 
 ## 6. ホスティング・ドメイン(Cloudflare Workers)
 

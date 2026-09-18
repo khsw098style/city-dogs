@@ -34,7 +34,7 @@
     menus: [],
     selectedMenu: null,
     staffList: [],
-    selectedStaffId: '', // '' = 指名なし(おまかせ)
+    selectedStaffId: '', // 担当スタイリストの指名は必須(2026-09-18〜)。空は「まだ選択されていない」
     selectedDate: null, // 'YYYY-MM-DD'
     slots: [],
     selectedSlot: null, // { start_at, staff_id, staff_name }
@@ -146,15 +146,21 @@
     }
   }
 
-  // 担当スタイリストの一覧。取得に失敗しても「指名なし」だけで予約は続行できるので、
-  // ここはエラーでも画面をブロックしない(コンソールに残すのみ)。
+  // 担当スタイリストの指名は必須(2026-09-18〜、「指名なし」は廃止)。
+  // 取得に失敗する/1人も出てこない場合は選択そのものができず予約を続行できないため、
+  // その旨をプルダウンに表示してブロックする。
   async function loadStaffList() {
     try {
       const data = await apiFetch('/staff');
       state.staffList = data.staff || [];
+      if (state.staffList.length === 0) {
+        el.staffSelect.innerHTML = '<option value="" disabled selected>現在ご案内できるスタイリストがいません</option>';
+        return;
+      }
       renderStaffOptions();
     } catch (err) {
       console.error('スタッフ一覧の取得に失敗しました:', err.message);
+      el.staffSelect.innerHTML = '<option value="" disabled selected>取得に失敗しました。再読み込みしてください</option>';
     }
   }
 
@@ -250,10 +256,13 @@
       el.slotArea.innerHTML = '<p class="wizard-status">先にメニューを選択してください。</p>';
       return;
     }
+    if (!state.selectedStaffId) {
+      el.slotArea.innerHTML = '<p class="wizard-status">先に担当スタイリストを選択してください。</p>';
+      return;
+    }
 
     try {
-      const params = new URLSearchParams({ date, menu_id: state.selectedMenu.id });
-      if (state.selectedStaffId) params.set('staff_id', state.selectedStaffId);
+      const params = new URLSearchParams({ date, menu_id: state.selectedMenu.id, staff_id: state.selectedStaffId });
       const data = await apiFetch(`/availability?${params.toString()}`);
       state.slots = data.slots || [];
       renderSlots(data);
@@ -333,7 +342,7 @@
       <dl>
         <dt>メニュー</dt><dd>${escapeHtml(selectedMenu.name)}</dd>
         <dt>日時</dt><dd>${jstDateFmt.format(start)} ${jstTimeFmt.format(start)}〜${jstTimeFmt.format(end)}</dd>
-        <dt>担当</dt><dd>${escapeHtml(selectedSlot.staff_name || '当日のご案内')}</dd>
+        <dt>担当</dt><dd>${escapeHtml(selectedSlot.staff_name)}</dd>
         <dt>料金</dt><dd class="summary-price">¥${yenFmt.format(selectedMenu.price)}</dd>
       </dl>
     `;

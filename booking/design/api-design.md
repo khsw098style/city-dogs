@@ -51,11 +51,13 @@
 
 ### GET /availability
 
-**Query**: `date`(必須, `YYYY-MM-DD`), `menu_id`(必須), `staff_id`(任意。指定なしは「フリー」指名なし扱い)
+**Query**: `date`(必須, `YYYY-MM-DD`), `menu_id`(必須), `staff_id`(必須)
+
+「指名なし(おまかせ)」は2026-09-18に廃止した(同一時刻に複数スタッフの枠が重複表示される・お客様が意図せずアシスタント等に割り当てられる、という設計上の問題があったため)。担当スタイリストの指名は常に必須。
 
 **処理**:
 1. `business_days` からその日の営業時間を取得。`is_open=false`、またはレコード自体が無い場合は空き枠なしを返す。
-2. 候補スタッフを決定(`staff_id`指定時はそのスタッフのみ。未指定時は`is_active=true`かつ当日`staff_shifts.is_working=true`の全員)。
+2. 候補スタッフを決定(`staff_id`で指定された1名。`role='assistant'`は対象外)。
 3. 各スタッフについて、`max(business_days.open_time, shift.start_time)` から `min(business_days.last_reception_time, shift.end_time)` の範囲で、`menus.duration_minutes` 刻みではなく **固定グラニュラリティ(既定30分)** で候補開始時刻を列挙する。
 4. 各候補について `[開始, 開始+duration)` が既存予約(`status`が稼働中とみなされるもの)と重ならないかを、`reservations` の `time_range` に対して`&&`判定で除外する。
 5. 過去時刻(現在時刻以前)の枠は除外する。
@@ -80,7 +82,7 @@
 {
   "customer": { "name": "山田太郎", "name_kana": "ヤマダタロウ", "phone": "09012345678", "email": "taro@example.com" },
   "menu_id": "…",
-  "staff_id": null,
+  "staff_id": "…",
   "start_at": "2026-09-20T10:00:00+09:00",
   "notes": ""
 }

@@ -25,6 +25,11 @@ Deno.serve(async (req) => {
 
     if (!date) throw new ApiError("VALIDATION_ERROR", "date は必須です。");
     if (!menuId) throw new ApiError("VALIDATION_ERROR", "menu_id は必須です。");
+    // 「指名なし」は2026-09-18に廃止(同一時刻に複数スタッフの枠が重複して見える・
+    // お客様が意図せずアシスタント等に割り当てられる、という設計上の問題があったため)。
+    // staff_idは必須にし、担当スタイリストを常に1名確定させた状態でのみ空き枠を返す。
+    if (!staffId) throw new ApiError("VALIDATION_ERROR", "staff_id は必須です。");
+    if (!isValidUuid(staffId)) throw new ApiError("VALIDATION_ERROR", "staff_id の形式が不正です。");
     if (excludeReservationId && !isValidUuid(excludeReservationId)) {
       throw new ApiError("VALIDATION_ERROR", "exclude_reservation_id の形式が不正です。");
     }

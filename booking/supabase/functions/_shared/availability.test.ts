@@ -394,7 +394,7 @@ Deno.test("generateSlots: 複数スタッフの枠がstart_at→staff_idの順�
   assertEquals(result.slots[1].staff_id, STAFF_B.id);
 });
 
-Deno.test("generateSlots: 指名なし(複数スタッフ)で稼働なしのスタッフは結果に出ない", () => {
+Deno.test("generateSlots: 複数スタッフを渡した場合、稼働なしのスタッフは結果に出ない", () => {
   const result = generateSlots(
     baseParams({
       staffList: [STAFF_A, STAFF_B],

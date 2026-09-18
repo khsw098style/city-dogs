@@ -266,6 +266,31 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .staff-column-body { padding: 0.8rem; display: flex; flex-direction: column; gap: 0.6rem; }
 .staff-column-empty { padding: 1rem; color: var(--faint); font-size: 0.82rem; text-align: center; }
 
+/* ---------- 売上予定・実績 ---------- */
+.revenue-total {
+  display: flex;
+  gap: 2rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.3rem;
+  margin-bottom: 1.2rem;
+}
+.revenue-total .revenue-block { flex: none; }
+.revenue-block { padding: 0.7rem 0; }
+.revenue-block + .revenue-block { border-top: 1px solid var(--border); }
+.revenue-total .revenue-block + .revenue-block { border-top: none; }
+.revenue-label { margin: 0 0 0.3rem; font-size: 0.76rem; color: var(--muted); }
+.revenue-count { margin: 0; font-size: 0.78rem; color: var(--faint); }
+.revenue-amount {
+  margin: 0.1rem 0 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+  font-family: 'Oswald', sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.revenue-block.is-actual .revenue-amount { color: var(--accent); }
+
 .reservation-card {
   background: var(--surface-2);
   border: 1px solid var(--border);

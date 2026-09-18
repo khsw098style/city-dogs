@@ -173,6 +173,12 @@
     customerSearchForm: document.getElementById('customerSearchForm'),
     customerResultMeta: document.getElementById('customerResultMeta'),
     customerCards: document.getElementById('customerCards'),
+
+    revenueMonth: document.getElementById('revenueMonth'),
+    revenuePrevMonth: document.getElementById('revenuePrevMonth'),
+    revenueNextMonth: document.getElementById('revenueNextMonth'),
+    revenueTotal: document.getElementById('revenueTotal'),
+    revenueArea: document.getElementById('revenueArea'),
   };
 
   // ---------------------------------------------------------------
@@ -424,6 +430,7 @@
         if (btn.dataset.tab === 'content') loadContentTabOnce();
         if (btn.dataset.tab === 'shifts') initShiftsTabOnce();
         if (btn.dataset.tab === 'customers') initCustomersTabOnce();
+        if (btn.dataset.tab === 'revenue') initRevenueTabOnce();
       });
     });
 
@@ -622,8 +629,8 @@
     return apiFetch('availability', `?${params.toString()}`);
   }
 
-  // 指名なし時は同一時刻に複数スタッフの枠が並びうるので開始時刻だけで重複を除いて表示し、
-  // 指名ありの時はそのスタッフの枠だけをそのまま表示する(いずれも値はstart_atのISO文字列)。
+  // 担当スタイリストの指定は必須(2026-09-18〜、「指名なし」は廃止)なので、
+  // 空き枠は常に1名分だけが返ってくる(値はstart_atのISO文字列)。
   function renderSlotOptions(selectEl, data) {
     if (!data || data.reason === 'closed') {
       selectEl.innerHTML = '<option value="">休業日です</option>';
@@ -633,15 +640,9 @@
       selectEl.innerHTML = '<option value="">空き枠がありません</option>';
       return;
     }
-    const seen = new Set();
-    const options = data.slots
-      .filter((slot) => (seen.has(slot.start_at) ? false : (seen.add(slot.start_at), true)))
-      .map((slot) => {
-        const label = data.slots.some((s) => s.start_at === slot.start_at && s.staff_id !== slot.staff_id)
-          ? `${jstTimeFmt.format(new Date(slot.start_at))}(${slot.staff_name})`
-          : jstTimeFmt.format(new Date(slot.start_at));
-        return `<option value="${slot.start_at}">${escapeHtml(label)}</option>`;
-      });
+    const options = data.slots.map(
+      (slot) => `<option value="${slot.start_at}">${escapeHtml(jstTimeFmt.format(new Date(slot.start_at)))}</option>`,
+    );
     selectEl.innerHTML = '<option value="">選択してください</option>' + options.join('');
   }
 
@@ -657,14 +658,19 @@
   async function refreshCreateSlots() {
     const menuId = el.crMenu.value;
     const date = el.crDate.value;
+    const staffId = el.crStaff.value;
     if (!menuId || !date) {
       el.crSlot.innerHTML = '<option value="">メニュー・日付を選択すると表示されます</option>';
+      return;
+    }
+    if (!staffId) {
+      el.crSlot.innerHTML = '<option value="">担当スタイリストを選択すると表示されます</option>';
       return;
     }
     const requestId = ++createSlotsRequestId;
     el.crSlot.innerHTML = '<option value="">読み込み中…</option>';
     try {
-      const data = await fetchAvailabilitySlots(menuId, el.crStaff.value, date);
+      const data = await fetchAvailabilitySlots(menuId, staffId, date);
       if (requestId !== createSlotsRequestId) return; // 自分より新しいリクエストが既に走っているので破棄
       renderSlotOptions(el.crSlot, data);
     } catch (err) {
@@ -687,7 +693,7 @@
       el.crMenu.innerHTML = '<option value="">選択してください</option>' + menus
         .map((m) => `<option value="${m.id}">${escapeHtml(m.name)}(¥${yenFmt.format(m.price)})</option>`)
         .join('');
-      el.crStaff.innerHTML = '<option value="">指名なし(おまかせ)</option>' +
+      el.crStaff.innerHTML = '<option value="" disabled selected>選択してください</option>' +
         staff.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
     } catch (err) {
       showFormError(el.createReservationError, `メニュー・スタッフ一覧の取得に失敗しました: ${err.message}`);
@@ -701,6 +707,10 @@
     const phone = el.crPhone.value.trim();
     if (!PHONE_RE.test(phone)) {
       showFormError(el.createReservationError, '電話番号の形式が正しくありません(例: 090-1234-5678)。');
+      return;
+    }
+    if (!el.crStaff.value) {
+      showFormError(el.createReservationError, '担当スタイリストを選択してください。');
       return;
     }
     if (!el.crSlot.value) {
@@ -721,7 +731,7 @@
             email: document.getElementById('crEmail').value.trim() || null,
           },
           menu_id: el.crMenu.value,
-          staff_id: el.crStaff.value || null,
+          staff_id: el.crStaff.value,
           start_at: el.crSlot.value,
           notes: document.getElementById('crNotes').value.trim(),
         },
@@ -773,7 +783,7 @@
       el.editReasonField.hidden = !REASON_REQUIRED_STATUSES.has(el.editStatusSelect.value);
     }
 
-    el.editStaffSelect.innerHTML = '<option value="">指名なし(おまかせ)</option>' +
+    el.editStaffSelect.innerHTML =
       (staffOptionsCache ?? []).map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
     el.editStaffSelect.value = reservation.staff_id ?? '';
     el.editDateInput.value = formatDateLocal(start);
@@ -784,7 +794,7 @@
     // スタッフ選択肢が未取得(検索タブから直接開いた等)ならここで読み込んでから選択し直す
     if (!staffOptionsCache) {
       loadStaffOptions().then((staff) => {
-        el.editStaffSelect.innerHTML = '<option value="">指名なし(おまかせ)</option>' +
+        el.editStaffSelect.innerHTML =
           staff.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
         el.editStaffSelect.value = reservation.staff_id ?? '';
         refreshEditSlots();
@@ -857,8 +867,8 @@
   async function submitReschedule(e) {
     e.preventDefault();
     hideFormError(el.editRescheduleError);
-    if (!el.editDateInput.value || !el.editSlotSelect.value) {
-      showFormError(el.editRescheduleError, '来店日・開始時刻を選択してください。');
+    if (!el.editStaffSelect.value || !el.editDateInput.value || !el.editSlotSelect.value) {
+      showFormError(el.editRescheduleError, '担当スタイリスト・来店日・開始時刻を選択してください。');
       return;
     }
 
@@ -867,7 +877,7 @@
     try {
       await apiFetch('admin-reservations', `/${editingReservation.id}`, {
         method: 'PATCH',
-        body: { staff_id: el.editStaffSelect.value || null, start_at: el.editSlotSelect.value },
+        body: { staff_id: el.editStaffSelect.value, start_at: el.editSlotSelect.value },
       });
       showSaveStatus(el.editRescheduleSaveStatus, '変更しました', true);
       closeModal(el.editReservationModal);
@@ -1984,6 +1994,79 @@
         <tbody>${rows}</tbody>
       </table>
     `;
+  }
+
+  // ---------------------------------------------------------------
+  // 売上予定・実績(スタイリストごとの月次見込み・実績)
+  // ---------------------------------------------------------------
+
+  let revenueTabInitialized = false;
+  function initRevenueTabOnce() {
+    if (!el.revenueMonth.value) el.revenueMonth.value = monthValueOf(new Date());
+    if (revenueTabInitialized) return;
+    revenueTabInitialized = true;
+
+    el.revenueMonth.addEventListener('change', loadRevenueTab);
+    el.revenuePrevMonth.addEventListener('click', () => shiftRevenueMonth(-1));
+    el.revenueNextMonth.addEventListener('click', () => shiftRevenueMonth(1));
+
+    loadRevenueTab();
+  }
+
+  function shiftRevenueMonth(delta) {
+    const [year, month] = el.revenueMonth.value.split('-').map(Number);
+    el.revenueMonth.value = monthValueOf(new Date(year, month - 1 + delta, 1));
+    loadRevenueTab();
+  }
+
+  async function loadRevenueTab() {
+    const [year, month] = el.revenueMonth.value.split('-').map(Number);
+    el.revenueTotal.innerHTML = '';
+    el.revenueArea.innerHTML = '<p class="status-text">読み込み中…</p>';
+    try {
+      const data = await apiFetch('admin-reservations', `/revenue-summary?year=${year}&month=${month}`);
+      renderRevenue(data.staff);
+    } catch (err) {
+      el.revenueArea.innerHTML = `<p class="status-text">取得に失敗しました: ${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  function revenueBlockHtml(label, count, amount, isActual) {
+    return `
+      <div class="revenue-block${isActual ? ' is-actual' : ''}">
+        <p class="revenue-label">${escapeHtml(label)}</p>
+        <p class="revenue-amount">¥${yenFmt.format(amount)}</p>
+        <p class="revenue-count">${count}件</p>
+      </div>
+    `;
+  }
+
+  function renderRevenue(staffList) {
+    if (!staffList || staffList.length === 0) {
+      el.revenueArea.innerHTML = '<p class="status-text">スタッフが登録されていません。</p>';
+      return;
+    }
+
+    const total = staffList.reduce((acc, s) => ({
+      forecast_count: acc.forecast_count + s.forecast_count,
+      forecast_amount: acc.forecast_amount + s.forecast_amount,
+      actual_count: acc.actual_count + s.actual_count,
+      actual_amount: acc.actual_amount + s.actual_amount,
+    }), { forecast_count: 0, forecast_amount: 0, actual_count: 0, actual_amount: 0 });
+
+    el.revenueTotal.innerHTML =
+      revenueBlockHtml('全体の見込み', total.forecast_count, total.forecast_amount, false) +
+      revenueBlockHtml('全体の実績', total.actual_count, total.actual_amount, true);
+
+    el.revenueArea.innerHTML = staffList.map((s) => `
+      <div class="staff-column">
+        <div class="staff-column-head"><h3>${escapeHtml(s.staff_name)}</h3></div>
+        <div class="staff-column-body">
+          ${revenueBlockHtml('見込み', s.forecast_count, s.forecast_amount, false)}
+          ${revenueBlockHtml('実績', s.actual_count, s.actual_amount, true)}
+        </div>
+      </div>
+    `).join('');
   }
 
   // ---------------------------------------------------------------

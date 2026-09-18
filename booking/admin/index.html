@@ -66,6 +66,7 @@
     <button type="button" class="tab-btn" data-tab="content">LPコンテンツ</button>
     <button type="button" class="tab-btn" data-tab="shifts">営業日・シフト</button>
     <button type="button" class="tab-btn" data-tab="customers">顧客管理</button>
+    <button type="button" class="tab-btn" data-tab="revenue">売上予定・実績</button>
   </nav>
 
   <main class="app-main">
@@ -165,7 +166,7 @@
       <div id="featureCards" class="content-card-list">
         <p class="status-text">読み込み中…</p>
       </div>
-      <details class="content-add-form">
+      <details class="content-add-form" id="featureAddSection">
         <summary class="add-form-label">＋ 新規登録</summary>
         <form id="featureAddForm">
           <div class="field"><label for="featureAddTitle">タイトル</label><input type="text" id="featureAddTitle" required></div>
@@ -179,7 +180,7 @@
       <div id="galleryCards" class="content-card-list">
         <p class="status-text">読み込み中…</p>
       </div>
-      <details class="content-add-form">
+      <details class="content-add-form" id="galleryAddSection">
         <summary class="add-form-label">＋ 新規登録</summary>
         <form id="galleryAddForm" class="has-image">
           <div class="card-fields">
@@ -207,7 +208,7 @@
       <div id="menuCards" class="content-card-list">
         <p class="status-text">読み込み中…</p>
       </div>
-      <details class="content-add-form">
+      <details class="content-add-form" id="menuAddSection">
         <summary class="add-form-label">＋ 新規登録</summary>
         <form id="menuAddForm">
           <div class="field"><label for="menuAddName">メニュー名</label><input type="text" id="menuAddName" required></div>
@@ -227,7 +228,7 @@
       <div id="staffBioCards" class="content-card-list">
         <p class="status-text">読み込み中…</p>
       </div>
-      <details class="content-add-form">
+      <details class="content-add-form" id="staffAddSection">
         <summary class="add-form-label">＋ 新規登録</summary>
         <form id="staffAddForm">
           <div class="field"><label for="staffAddName">氏名</label><input type="text" id="staffAddName" required></div>
@@ -305,6 +306,22 @@
       </div>
     </section>
 
+    <!-- 売上予定・実績タブ -->
+    <section class="tab-panel" data-tab="revenue">
+      <div class="date-nav">
+        <button type="button" class="btn btn-ghost btn-small" id="revenuePrevMonth">‹ 前月</button>
+        <input type="month" id="revenueMonth" class="date-input">
+        <button type="button" class="btn btn-ghost btn-small" id="revenueNextMonth">翌月 ›</button>
+      </div>
+      <p class="content-note">
+        「見込み」はこの月の予約のうちキャンセル・無断キャンセル以外すべて(まだ来店前のものも含む、このまま進めば得られる想定の売上)。「実績」はそのうち会計完了(completed)まで進んだものだけの合計です。
+      </p>
+      <div id="revenueTotal" class="revenue-total"></div>
+      <div id="revenueArea" class="staff-column-grid">
+        <p class="status-text">読み込み中…</p>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -326,7 +343,7 @@
       </div>
       <div class="field">
         <label for="crStaff">担当スタイリスト</label>
-        <select id="crStaff"><option value="">指名なし(おまかせ)</option></select>
+        <select id="crStaff" required><option value="" disabled selected>選択してください</option></select>
       </div>
       <div class="field"><label for="crDate">来店日</label><input type="date" id="crDate" required></div>
       <div class="field">
@@ -378,7 +395,7 @@
         <form id="editRescheduleForm">
           <div class="field">
             <label for="editStaffSelect">担当スタイリスト</label>
-            <select id="editStaffSelect"><option value="">指名なし(おまかせ)</option></select>
+            <select id="editStaffSelect" required></select>
           </div>
           <div class="field"><label for="editDateInput">来店日</label><input type="date" id="editDateInput"></div>
           <div class="field">

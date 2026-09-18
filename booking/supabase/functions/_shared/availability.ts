@@ -82,8 +82,7 @@ export function generateSlots(params: GenerateSlotsParams): { closed: boolean; s
   for (const staff of staffList) {
     const shift = shiftByStaff.get(staff.id);
 
-    // 指名時にシフト未登録のスタッフは稼働なし扱い。指名なし時は「全スタッフ稼働」をデフォルトにはせず、
-    // シフトが明示的に登録されているスタッフのみを対象にする(未登録=当日勤務未確定という運用を想定)。
+    // シフト未登録のスタッフは稼働なし扱い(未登録=当日勤務未確定という運用を想定)。
     if (!shift || !shift.is_working) continue;
 
     const shiftStart = shift.start_time ? toJstDate(date, shift.start_time) : businessOpen;
@@ -124,7 +123,9 @@ export function generateSlots(params: GenerateSlotsParams): { closed: boolean; s
 interface ComputeAvailabilityParams {
   date: string; // YYYY-MM-DD (JST)
   menuId: string;
-  staffId?: string | null;
+  // 「指名なし」は2026-09-18に廃止(同一時刻に複数スタッフの枠が重複して見える・お客様が
+  // 意図せずアシスタント等に割り当てられる、という設計上の問題があったため)。必ず1名指定する。
+  staffId: string;
   now?: Date; // テスト用に注入可能
   // リスケジュール時、変更対象の予約自身を「既存予約との重なり」判定から除外するために使う。
   // 指定しないと、変更前の時間帯が自分自身とぶつかって誤ってSLOT_UNAVAILABLEになってしまう
@@ -151,9 +152,7 @@ export async function computeAvailability(
 
   const staffList = await fetchStaff(client, staffId);
   if (staffList.length === 0) {
-    // 指名ありで該当スタッフが見つからない場合のみエラー。指名なしで単に誰も稼働していない日は「空き枠0」として扱う。
-    if (staffId) throw new ApiError("NOT_FOUND", "指定されたスタイリストが見つかりません。");
-    return { menu: menuInfo, closed: false, slots: [] };
+    throw new ApiError("NOT_FOUND", "指定されたスタイリストが見つかりません。");
   }
   const staffIds = staffList.map((s) => s.id);
 
@@ -198,14 +197,17 @@ async function fetchBusinessDay(client: SupabaseClient, date: string): Promise<B
   return data;
 }
 
-async function fetchStaff(client: SupabaseClient, staffId?: string | null): Promise<StaffInfo[]> {
-  let query = client
+async function fetchStaff(client: SupabaseClient, staffId: string): Promise<StaffInfo[]> {
+  // 「指名可能」の基準はGET /staffと同じrole != 'assistant'(アシスタントはシフトを持たず
+  // 単独で予約を受け付けない運用のため)。staffIdがassistantを指していた場合はここで
+  // 除外され、空配列→呼び出し元でNOT_FOUNDになる(2026-09-18、実機で発覚・修正)。
+  const query = client
     .from("staff")
     .select("id, name")
     .eq("is_active", true)
+    .neq("role", "assistant")
+    .eq("id", staffId)
     .order("display_order", { ascending: true });
-
-  if (staffId) query = query.eq("id", staffId);
 
   const { data, error } = await query;
   if (error) throw new ApiError("INTERNAL_ERROR", "スタッフ情報の取得に失敗しました。");

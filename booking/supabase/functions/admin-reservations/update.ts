@@ -2,12 +2,12 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ApiError, jsonResponse } from "../_shared/http.ts";
 import { computeAvailability, jstDateOf } from "../_shared/availability.ts";
 import { parseTstzRange } from "../_shared/range.ts";
-import { isValidUuid } from "../_shared/validation.ts";
+import { isValidUuid, requireNonEmptyString } from "../_shared/validation.ts";
 
 interface UpdateReservationBody {
   status?: string;
   cancel_reason?: string;
-  staff_id?: string | null;
+  staff_id?: string;
   start_at?: string;
 }
 
@@ -54,7 +54,11 @@ export async function updateReservation(
     const currentRange = parseTstzRange(current.time_range as unknown as string);
     const durationMs = currentRange.end.getTime() - currentRange.start.getTime();
 
-    const newStaffId = body.staff_id !== undefined ? body.staff_id : (current.staff_id as string | null);
+    // 「指名なし」は2026-09-18に廃止。staff_idを明示した場合は必ず1名指定させ、
+    // 指定しない場合は現在の担当を維持する(「担当を空にする」は未サポート)。
+    const newStaffId = body.staff_id !== undefined
+      ? requireNonEmptyString(body.staff_id, "担当スタイリスト")
+      : (current.staff_id as string);
     const newStartAt = body.start_at !== undefined ? new Date(body.start_at) : currentRange.start;
     if (Number.isNaN(newStartAt.getTime())) {
       throw new ApiError("VALIDATION_ERROR", "予約日時の形式が不正です。");
@@ -73,9 +77,7 @@ export async function updateReservation(
     });
     if (availability.closed) throw new ApiError("SLOT_UNAVAILABLE", "その日は休業日です。");
 
-    const matchedSlot = availability.slots.find(
-      (slot) => slot.start_at === newStartAt.toISOString() && (!newStaffId || slot.staff_id === newStaffId),
-    );
+    const matchedSlot = availability.slots.find((slot) => slot.start_at === newStartAt.toISOString());
     if (!matchedSlot) throw new ApiError("SLOT_UNAVAILABLE", "変更先の時間はすでに埋まっています。");
 
     const newEndAt = new Date(newStartAt.getTime() + durationMs);

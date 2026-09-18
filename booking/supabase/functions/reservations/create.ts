@@ -14,7 +14,7 @@ import {
 interface CreateReservationBody {
   customer?: { name?: string; name_kana?: string; phone?: string; email?: string };
   menu_id?: string;
-  staff_id?: string | null;
+  staff_id?: string;
   start_at?: string;
   notes?: string;
   turnstile_token?: string;
@@ -46,7 +46,8 @@ export async function createReservation(
   }
   const menuId = requireNonEmptyString(body.menu_id, "メニュー");
   const startAtRaw = requireNonEmptyString(body.start_at, "予約日時");
-  const staffId = body.staff_id ?? null;
+  // 「指名なし」は2026-09-18に廃止。担当スタイリストの指定を必須にする。
+  const staffId = requireNonEmptyString(body.staff_id, "担当スタイリスト");
 
   const startAt = new Date(startAtRaw);
   if (Number.isNaN(startAt.getTime())) {
@@ -64,9 +65,7 @@ export async function createReservation(
     throw new ApiError("SLOT_UNAVAILABLE", "その日は休業日です。");
   }
 
-  const matchedSlot = availability.slots.find(
-    (slot) => slot.start_at === startAt.toISOString() && (!staffId || slot.staff_id === staffId),
-  );
+  const matchedSlot = availability.slots.find((slot) => slot.start_at === startAt.toISOString());
   if (!matchedSlot) {
     throw new ApiError("SLOT_UNAVAILABLE", "選択した時間は埋まりました。お手数ですが再度お選びください。");
   }
