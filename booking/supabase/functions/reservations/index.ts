@@ -1,22 +1,25 @@
 // /reservations 配下のルーティング。
 //   POST   /reservations                            -> createReservation
-//   GET    /reservations/lookup                     -> lookupReservation(電話番号+予約番号)
 //   GET    /reservations/manage                     -> getReservationByToken(メール記載のトークン)
 //   POST   /reservations/manage/cancel               -> cancelReservationByToken
-//   POST   /reservations/:reservation_number/cancel  -> cancelReservation(電話番号確認)
 //
 // Supabaseは `https://.../functions/v1/reservations/...` の形でパスを渡してくるため、
 // "reservations" より後ろの部分を自前でパースしてサブルーティングする。
-// "manage"系は2セグメントパターンが":reservation_number/cancel"と衝突しうるため、
-// より具体的な"manage"判定を先に評価する順序にしている。
+//
+// 【2026-09-18削除】電話番号+予約番号方式の照会・キャンセル(GET /reservations/lookup、
+// POST /reservations/:reservation_number/cancel)は、コードレビューで「呼び出し元のUIが
+// LP・管理画面のどちらにも存在しない、認証なしの公開API」であることが判明したため削除した。
+// 設計意図(api-design.md記載)は「電話口での問い合わせ向け」だったが、その用途は
+// 管理画面の「予約検索」タブ(admin-reservations、要ログイン、電話番号検索対応済み)で
+// 既にカバーされており、顧客の自己解決用途は`manage_token`方式(下記2ルート)で足りている。
+// 呼び出し元のない公開エンドポイントを残すことは、正規の利用経路がないまま攻撃対象だけを
+// 増やすことになるため、機能追加(Turnstile等)ではなく削除で対応した。
 
 import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { errorResponse, ApiError } from "../_shared/http.ts";
 import { serviceClient } from "../_shared/supabase.ts";
 import { enforceRateLimit } from "../_shared/rateLimit.ts";
 import { createReservation } from "./create.ts";
-import { lookupReservation } from "./lookup.ts";
-import { cancelReservation } from "./cancel.ts";
 import { getReservationByToken, cancelReservationByToken } from "./manage.ts";
 
 Deno.serve(async (req) => {
@@ -34,15 +37,9 @@ Deno.serve(async (req) => {
     const client = serviceClient();
 
     if (req.method === "POST" && subPath.length === 0) {
-      // スパム・ボットによる大量登録の抑止(Turnstile等の追加対策は別途検討)。
+      // スパム・ボットによる大量登録の抑止(Turnstile検証はcreateReservation内で実施)。
       await enforceRateLimit(client, req, { bucket: "reservations-create", limit: 10, windowSeconds: 600 });
       return await createReservation(req, client, headers);
-    }
-
-    if (req.method === "GET" && subPath.length === 1 && subPath[0] === "lookup") {
-      // reservation_numberが連番のため、phoneとの総当たりを防ぐ本命の制限。
-      await enforceRateLimit(client, req, { bucket: "reservations-lookup", limit: 10, windowSeconds: 300 });
-      return await lookupReservation(url, client, headers);
     }
 
     if (req.method === "GET" && subPath.length === 1 && subPath[0] === "manage") {
@@ -54,12 +51,6 @@ Deno.serve(async (req) => {
     if (req.method === "POST" && subPath.length === 2 && subPath[0] === "manage" && subPath[1] === "cancel") {
       await enforceRateLimit(client, req, { bucket: "reservations-manage-cancel", limit: 10, windowSeconds: 300 });
       return await cancelReservationByToken(req, client, headers);
-    }
-
-    if (req.method === "POST" && subPath.length === 2 && subPath[1] === "cancel") {
-      // reservation_number(連番)+phoneの総当たりで他人の予約を無断キャンセルされないための制限。
-      await enforceRateLimit(client, req, { bucket: "reservations-cancel", limit: 10, windowSeconds: 300 });
-      return await cancelReservation(decodeURIComponent(subPath[0]), req, client, headers);
     }
 
     throw new ApiError("NOT_FOUND", "対応していないエンドポイントです。");

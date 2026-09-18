@@ -22,8 +22,6 @@
 | GET | `/site-content` | LPの「CONCEPT」「SHOP & STYLE」「STAFF」セクションと評価バッジ(★スコア・口コミ件数)用の表示データを1回で返す(2026-09-13実装・デプロイ済み、評価バッジは2026-09-17追加) |
 | GET | `/availability` | 指定日・メニュー(・任意でスタイリスト指名)の空き枠一覧 |
 | POST | `/reservations` | Web予約の新規作成。`customer.email`必須(確認・変更・キャンセル用リンクの送信先) |
-| GET | `/reservations/lookup` | 電話番号+予約番号で自分の予約を照会 |
-| POST | `/reservations/:reservation_number/cancel` | 顧客自身によるキャンセル(電話番号で本人確認) |
 | GET | `/reservations/manage` | `manage_token`で予約1件を照会(ログイン不要、メール記載のリンク用) |
 | POST | `/reservations/manage/cancel` | `manage_token`で予約1件をキャンセル |
 
@@ -91,16 +89,16 @@
 **サーバー側の処理(境界値・不正入力を必ず考慮)**:
 1. `phone` を日本の携帯電話番号形式で、`email` を簡易フォーマットでバリデーション。`name`必須・空白のみは拒否。
 2. `start_at` が過去でないこと、営業時間内であることを **`/availability`と同じロジックで再計算して検証**する(クライアントが返した枠をそのまま信用しない)。
-3. `phone` で `customers` をUPSERT(既存なら再利用、初回なら新規作成。`email`も都度更新)。
+3. `phone` で `customers` をUPSERT(既存なら再利用、初回なら新規作成。**既存顧客のname/name_kana/emailは上書きしない**(2026-09-17、コードレビューで発見・修正。認証なしの公開エンドポイントから他人の連絡先を書き換えられる穴だったため、`upsertCustomerByPhone()`の`allowOverwrite`を公開予約側ではfalse固定にした。電話予約の代理登録(`admin-reservations`)はスタッフが本人確認済みのため`allowOverwrite: true`のまま))。
 4. `end_at = start_at + menus.duration_minutes`、`price_at_booking = menus.price` を確定。
 5. `status = 'confirmed'`、`source = 'web'` でINSERT。`reservation_number`・`manage_token`はどちらもDB側で自動生成。
 6. INSERT時にDBの`EXCLUDE`制約違反(`23P01`)を検知した場合 → 直前の空き枠チェックとINSERTの間に他の予約が入った競合状態なので、`409 SLOT_UNAVAILABLE`を返す。
 7. 成功したら、`manage_token`を埋め込んだ確認・変更・キャンセルリンクを`email`宛にメール送信する(Resend経由、`_shared/email.ts`)。**メール送信失敗は予約作成の失敗にしない**(fail-soft。ログにのみ記録し、レスポンスは通常どおり201を返す)。
 
-**顧客ログインを作らない設計での本人確認方法(3通り)**:
-- 電話番号 + 予約番号(`GET /reservations/lookup`) — 電話口での問い合わせ向け
-- 電話番号 + 予約番号(`POST /reservations/:reservation_number/cancel`) — 同上
+**顧客ログインを作らない設計での本人確認方法**:
 - **`manage_token`のみ**(`GET /reservations/manage` / `POST /reservations/manage/cancel`) — メールのリンクを開くだけで本人確認完了。`reservations.manage_token`は`id`(主キー)とは別カラムにしている(「識別子」と「操作権限」を分離するため。将来的にトークンだけを再発行・失効させたい場合にも対応しやすい)
+
+**【2026-09-18削除】電話番号+予約番号方式**(`GET /reservations/lookup` / `POST /reservations/:reservation_number/cancel`、「電話口での問い合わせ向け」として設計していたもの)は、コードレビューでLP・管理画面のどちらからも呼ばれていない(呼び出し元のUIが存在しない)ことが判明したため削除した。この用途は管理画面の「予約検索」タブ(`GET /admin/reservations`、要ログイン、電話番号検索対応済み)で既にカバーされている。
 
 **Response 201**:
 ```json

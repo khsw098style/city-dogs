@@ -136,15 +136,9 @@ curl -X POST "https://<project-ref>.supabase.co/functions/v1/reservations" \
 curl "https://<project-ref>.supabase.co/functions/v1/admin-reservations/schedule?date=2026-09-20" \
   -H "Authorization: Bearer <staff access token>"
 
-# 予約の照会
-curl "https://<project-ref>.supabase.co/functions/v1/reservations/lookup?phone=09012345678&reservation_number=<予約番号>" \
+# 予約の確認・キャンセル(顧客向け、manage_token方式)。tokenは予約確認メールに記載
+curl "https://<project-ref>.supabase.co/functions/v1/reservations/manage?token=<manage_token>" \
   -H "Authorization: Bearer <anon key>"
-
-# キャンセル(パスはreservation_number。内部idではない)
-curl -X POST "https://<project-ref>.supabase.co/functions/v1/reservations/<予約番号>/cancel" \
-  -H "Authorization: Bearer <anon key>" \
-  -H "Content-Type: application/json" \
-  -d '{"phone":"090-1234-5678"}'
 ```
 
 ## 8. 管理画面ログイン用アカウントの作成
@@ -164,7 +158,7 @@ update staff set auth_user_id = '<auth_user_id>' where name = '當眞 優希';
 
 ## 実装済み/未実装
 
-- 実装済み・実機検証済み: `menus`、`staff`、`availability`、`reservations`(作成・照会・キャンセル・`manage_token`による照会/キャンセル)。公開API(認証なし)
+- 実装済み・実機検証済み: `menus`、`staff`、`availability`、`reservations`(作成・`manage_token`による照会/キャンセル)。公開API(認証なし)
 - 実装済み・実機検証済み: `admin-reservations`(スケジュール表示・検索)。管理API(要ログイン)。ステータス変更・電話予約代理登録・シフト設定等は未実装([../design/api-design.md](../design/api-design.md)の実装状況列を参照)
 - 実装済み・コードレベルでは完了、**実送信は未検証**: 予約確認メール(Resend経由、`_shared/email.ts`)。`RESEND_API_KEY`のsecret未設定のため
 - 未実装: 公開APIの不正利用対策(Cloudflare Turnstile連携、レート制限)。本番公開前に必須

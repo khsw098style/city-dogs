@@ -118,8 +118,8 @@ city-dogs/
             ├── menus/            # GET /menus
             ├── staff/            # GET /staff(指名可能なスタッフ一覧)
             ├── availability/     # GET /availability
-            ├── reservations/     # POST /reservations, GET /reservations/lookup, POST /reservations/:reservation_number/cancel,
-            │                     # GET /reservations/manage, POST /reservations/manage/cancel
+            ├── reservations/     # POST /reservations, GET /reservations/manage, POST /reservations/manage/cancel
+            │                     # (電話番号+予約番号方式のGET .../lookup・POST .../:reservation_number/cancelは2026-09-18削除。理由は下記参照)
             ├── admin-reservations/  # 【要ログイン】GET/POST /admin-reservations, GET /admin-reservations/schedule, PATCH /admin-reservations/:id
             ├── site-content/     # GET /site-content(LPのCONCEPT/SHOP&STYLE/STAFF紹介文・評価バッジ。公開・認証不要)
             ├── admin-site-content/  # 【要ログイン】/admin/site-content/features・/gallery・/staff・/rating のCRUD(LPコンテンツ編集用)
@@ -244,6 +244,11 @@ SUPABASE_SERVICE_ROLE_KEY=<Project Settings > API のservice_roleキー> npm run
   2. **`ALLOWED_ORIGINS`のsecret設定**: 現状未設定で全オリジン許可(`*`)。本番ドメイン確定後に必ず絞る(ホスティング決定と連動するタスク)
   3. **Supabaseダッシュボードのアカウント2段階認証(2FA)の確認**: RLSを固めても、管理画面に入れるアカウント自体が乗っ取られては意味がない。ユーザー側で確認が必要な項目(AI側では確認・設定不可)
   4. **個人情報保護法(APPI)対応の意識**: 氏名・電話番号を扱う以上、事業規模に関わらず対象になる。今回のRLS対応のような技術的安全管理措置は継続して意識すること(法律の詳細は専門家確認が確実)
+- **コードレビュー(第2回、別視点)で発見した2件のHIGHを修正(2026-09-17)**: 業務ロジック横断の検証に絞った再レビューで、DB制約・RLSの整合性確認だけでは見つからなかった2件を発見・即日修正した。
+  1. **公開予約フォームからの顧客情報上書き**: `_shared/customers.ts`の`upsertCustomerByPhone()`が、電話番号一致で既存顧客が見つかった場合に氏名・emailを無条件で上書きしていた。認証も本人確認もない公開予約(`POST /reservations`)経由で、他人の電話番号さえ知っていればその顧客のemailを書き換えられ、将来の予約確認メールを横取りされうる穴だった。`allowOverwrite`フラグを追加し、公開予約側は上書きしない(既定false)、電話予約の代理登録(`admin-reservations/create.ts`、スタッフが本人確認済み)のみ`allowOverwrite: true`で従来どおり上書きする、という分岐で解消
+  2. **予約キャンセル・ステータス更新の非原子的処理(TOCTOU競合)**: `reservations/cancel.ts`・`reservations/manage.ts`・`admin-reservations/update.ts`の3箇所とも、「SELECTでstatus取得→アプリ側で遷移可否判定→無条件UPDATE」という構造で、SELECTとUPDATEの間に別リクエストがstatusを変えても検知できなかった(例: 会計完了直後に顧客キャンセルが飛ぶと`completed`が`cancelled_by_customer`で上書きされる)。3箇所ともUPDATE文に`.in("status", ACTIVE_STATUSES)`または`.eq("status", current.status)`を追加し、原子的な条件付き更新に変更。影響0件(競合)の場合は`INVALID_STATUS_TRANSITION`を返すようにした
+  - **教訓: 「全体を網羅的に洗う」レビューと「業務ロジックを横断して弱点を探す」レビューは観点が違うため、両方やって初めて見つかる不具合がある。**特にTOCTOU(Time-of-check to time-of-use)のような並行処理の穴は、DB制約・RLS・型チェックのような静的な確認だけでは検出できない
+- **呼び出し元のない公開エンドポイントを削除(2026-09-18)**: 上記の第2回レビューで、`GET /reservations/lookup`・`POST /reservations/:reservation_number/cancel`(電話番号+予約番号方式の照会・キャンセル)が、LP・管理画面のどちらからも一度も呼ばれていない(呼び出し元のUIが存在しない)認証なしの公開APIであることが判明した。設計意図(api-design.md記載)は「電話口での問い合わせ向け」だったが、その用途は管理画面の「予約検索」タブ(`admin-reservations`、要ログイン、電話番号検索に既に対応済み)で実質カバーされており、顧客の自己解決用途は`manage_token`方式で足りている。Turnstile等を追加して守る対象ではなく、正規の利用経路がないまま攻撃対象だけを増やしていたと判断し、`reservations/lookup.ts`・`reservations/cancel.ts`を削除、`reservations/index.ts`のルーティングからも除去した(api-design.md・supabase/README.mdの記載も合わせて更新)。**上記2026-09-16のレート制限・Turnstileの記載にある`GET /reservations/lookup`・`POST /reservations/:reservation_number/cancel`への言及は、この削除により古い記述になっている(履歴として残すが現在は存在しないエンドポイント)**
 - **スタッフの休憩時間を空き枠計算から除外する — 実装・デプロイ済み(2026-09-16)**: バックログ項目を解消。`staff_shifts`に`break_start_time`/`break_end_time`(1日1回、任意)を追加し、`_shared/availability.ts`の`generateSlots()`で既存予約との重なり判定と同じ考え方(半開区間の`overlaps()`)で、施術時間が休憩に少しでもかかる枠を除外するようにした。
   - `0008_staff_shift_breaks.sql`: 2カラム追加+CHECK制約(片方だけの指定を禁止、開始<終了を強制)
   - `admin-staff-shifts`(shifts.ts): バリデーション追加、UI(`booking/admin/`のシフト編集モーダル)に休憩開始・終了(任意)の入力欄を追加。スケジュールタブ・シフトカレンダーの表示テキストにも休憩時間を併記
