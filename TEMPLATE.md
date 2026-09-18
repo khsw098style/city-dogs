@@ -15,7 +15,7 @@
 
 - [ ] https://supabase.com/dashboard で新規プロジェクトを作成(**Region: Northeast Asia (Tokyo)** を必ず選ぶ)
 - [ ] `booking/`で `npx supabase login` → `npm run link -- --project-ref <新Project Ref>`
-- [ ] `npm run db:push` で migrations(`0001`〜`0008`、全テーブル・RLS・制約含む。店舗非依存の汎用スキーマなのでそのまま使える)を適用
+- [ ] `npm run db:push` で migrations(`0001`〜`0010`、全テーブル・RLS・制約・Storageバケット`site-images`含む。店舗非依存の汎用スキーマなのでそのまま使える)を適用
 - [ ] `npx supabase projects api-keys --project-ref <新Project Ref>` で新プロジェクトの `publishable` キー(`sb_publishable_...`)を控える
 
 ## 2. 店舗固有ファイルの書き換え(`🏪 店舗固有` コメント参照)
@@ -33,8 +33,8 @@
 
 ## 3. Edge Functionsのデプロイ
 
-- [ ] `booking/`で `npm run functions:deploy`(全12 Functionsを一括デプロイ。個別デプロイする場合は `npx supabase functions deploy <name> --use-api`)
-- [ ] デプロイ後、`npx supabase functions list` でそれぞれの `version`/`updated_at` が今回のデプロイ時刻に更新されているか確認する(**まれにCLIが成功表示でも実際には反映されないことがある**。数分待っても`updated_at`が変わらない場合は `functions delete <name>` → `deploy` し直すと解消する。詳細はCLAUDE.md参照)
+- [ ] `booking/`で `npm run functions:deploy`(全11 Functionsを一括デプロイ。個別デプロイする場合は `npx supabase functions deploy <name> --use-api`)
+- [ ] デプロイ後、`npx supabase functions list` でそれぞれの `version`/`updated_at` が今回のデプロイ時刻に更新されているか確認する(**まれにCLIが成功表示でも実際には反映されないことがある**。数分待っても`updated_at`が変わらない場合は `functions delete <name>` → `deploy` し直すと解消する。詳細はCHANGELOG.md参照)
 
 ## 4. スタッフ・管理画面ログイン
 
@@ -48,7 +48,7 @@
 - [ ] `RESEND_API_KEY="<Resendダッシュボードで発行したAPIキー>"`
 - [ ] `MANAGE_PAGE_BASE_URL="https://<LPの本番ドメイン>/manage.html"`
 - [ ] `RESEND_FROM_ADDRESS="<新店舗名> <no-reply@新店舗ドメイン>"`(独自ドメインをResend側で検証済みであること)
-- [ ] `TURNSTILE_SECRET_KEY="<Cloudflare Turnstileダッシュボードで発行したシークレットキー>"`(未設定の間はfail-openで検証がスキップされるだけなので、設定し忘れると気づきにくい。本番公開前に必ず設定すること)。**本番の実キーを設定すると、`lp/tests/reserve.e2e.mjs`・`booking/admin/tests/admin.e2e.mjs`(2026-09-17にログインフォームにもTurnstileを追加)を実行する前に一時的にテスト用シークレットキー(`1x0000000000000000000000000000000AA`)へ戻す必要がある**(テスト用サイトキーが発行するダミートークンは本番の実キーでは拒否される仕様のため)。テスト実行後は本番キーに戻し忘れないこと。詳細は各テストファイル冒頭のコメントとCLAUDE.mdを参照
+- [ ] `TURNSTILE_SECRET_KEY="<Cloudflare Turnstileダッシュボードで発行したシークレットキー>"`(未設定の間はfail-openで検証がスキップされるだけなので、設定し忘れると気づきにくい。本番公開前に必ず設定すること)。**本番の実キーを設定すると、`lp/tests/reserve.e2e.mjs`・`booking/admin/tests/admin.e2e.mjs`(2026-09-17にログインフォームにもTurnstileを追加)を実行する前に一時的にテスト用シークレットキー(`1x0000000000000000000000000000000AA`)へ戻す必要がある**(テスト用サイトキーが発行するダミートークンは本番の実キーでは拒否される仕様のため)。テスト実行後は本番キーに戻し忘れないこと。詳細は各テストファイル冒頭のコメントとCHANGELOG.mdを参照
 
 ## 6. ホスティング・ドメイン(Cloudflare Workers)
 

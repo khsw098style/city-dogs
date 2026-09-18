@@ -155,8 +155,12 @@ where (staff_id is not null and status in (...稼働中とみなすステータ�
 
 メール送信は Resend(https://resend.com、無料枠)経由。送信失敗は予約作成自体の失敗にしない(fail-soft。`_shared/email.ts`が例外を握りつぶし、ログにのみ記録する設計)。
 
-### 8. LPコンテンツの画像アップロードは今回スコープ外(枠組みのみ用意)
-`site_gallery_photos.image_url`・`staff.avatar_image_url`はどちらも単純なtext列で、Supabase Storage等の実体には結び付けていない。管理画面から画像ファイルを直接アップロードできるようにする機能(Storageバケットの用意、アップロードUI、アクセス権設計)は、2026-09-13時点でユーザーの判断により**意図的に未実装のまま**にしている(「ここは枠組だけは作っておいて中身は空でよい」)。カラム自体は用意してあるので、将来実装する際もスキーマ変更なしで対応できる。それまでは、画像を差し替えたい場合は運用側が`lp/images/`配下のファイルを直接置き換えるか、`image_url`にSupabase Storageの公開URLを手動で入れる形になる。
+### 8. LPコンテンツの画像アップロード(2026-09-18実装)
+`site_gallery_photos.image_url`・`staff.avatar_image_url`はどちらも単純なtext列のまま(スキーマ変更なし)。2026-09-13時点では「パスを手入力する」運用を意図的な設計としていたが、実際には画像の実配置(git commit+再デプロイ)を開発者に依頼する必要があり、他のLPコンテンツ編集(特徴カード・メニュー・スタッフ紹介文)と違ってオーナー自身で完結できていなかったため、ユーザー判断により画像アップロード機能を実装した。
+
+Supabase Storageに公開バケット`site-images`を新設(`0010_site_images_storage.sql`)。読み取りは公開(LPが認証なしで表示するため)、書き込み(追加・更新・削除)は稼働中スタッフのみに制限している。この判定は`requireStaff()`(`_shared/auth.ts`)と同じ`staff.is_active`をStorage側のRLSポリシーでも参照する形にしており、退職・無効化されたスタッフのSupabase Authセッションが有効なままでもアップロードできないようにしている(Storageポリシーは`to authenticated`だけではJWTの有効性しか見ず、アプリ側のis_active判定を引き継がないため)。
+
+管理画面(`booking/admin/js/admin.js`)は、既存のログイン済みSupabaseクライアント(`client`)から直接`client.storage.from('site-images').upload(...)`でアップロードし、`getPublicUrl()`で得た公開URLを既存の`image_url`/`avatar_image_url`テキスト欄にそのまま書き込む方式にした。Edge Function側の変更は一切不要(どちらの列も元々ただのtext列で形式検証がなく、Storageの公開URLも普通の文字列としてそのまま通る)。画像を差し替えた場合は、旧ファイルをベストエフォートでStorageから削除する後片付けも実装済み(1GB無料枠の消費を抑えるため)。
 
 ## 未決事項(次回すり合わせたいこと)
 

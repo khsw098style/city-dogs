@@ -15,7 +15,7 @@ export async function getRating(client: SupabaseClient, headers: HeadersInit) {
   return jsonResponse({ rating: data }, { headers });
 }
 
-// PUT /admin-site-content/rating — HotPepper等の実際の掲載ページを見ながら手動で数字を更新する。
+// PUT /admin-site-content/rating — Googleの口コミページを見ながら手動で数字を更新する。
 // 単一行(id=1)固定なので、作成・削除エンドポイントは設けない。
 export async function updateRating(req: Request, client: SupabaseClient, headers: HeadersInit) {
   const body = await parseJsonBody(req);

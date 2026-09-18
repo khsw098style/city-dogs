@@ -117,7 +117,7 @@ button, input, select, textarea { font-family: inherit; }
   color: var(--muted);
   margin-bottom: 0.4rem;
 }
-.field input,
+.field input:not([type="checkbox"]),
 input[type="text"], input[type="email"], input[type="password"], input[type="date"], select {
   width: 100%;
   background: var(--surface-2);
@@ -130,6 +130,22 @@ input[type="text"], input[type="email"], input[type="password"], input[type="dat
 }
 .field input:focus,
 input:focus, select:focus { outline: none; border-color: var(--accent); }
+
+/* チェックボックス+ラベル文言(例: 「LPに公開する」)は「☑ 文言」の1行で左揃えにする。
+   上のルールがcheckboxにもwidth:100%等を効かせてしまい、巨大な四角形の下に文言が
+   折り返される見た目になっていたため、checkboxはこのルールの対象から除外している。 */
+.field label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0;
+}
+.field input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  flex-shrink: 0;
+}
 
 .form-error {
   background: var(--st-danger-bg);
@@ -202,11 +218,19 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .status-text { color: var(--muted); font-size: 0.88rem; padding: 1.2rem 0; }
 
 /* ---------- Schedule ---------- */
+/* スクロールしても「今どの日付/月を見ているか」が常にわかるよう、.content-subnavと
+   同じ考え方でスティッキーにする(2026-09-18、営業日・シフトタブでのフィードバックを受けて対応)。 */
 .date-nav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 0.8rem;
-  margin-bottom: 1rem;
+  background: var(--bg);
+  padding: 0.7rem 0.2rem;
+  margin: 0 0 1rem;
+  border-bottom: 1px solid var(--border);
 }
 .date-nav .date-input { max-width: 170px; }
 
@@ -353,6 +377,7 @@ table.search-table tr:last-child td { border-bottom: none; }
   color: var(--muted);
   margin: 0 0 1.4rem;
 }
+.content-note a { color: var(--accent); text-decoration: underline; }
 /* サブナビの高さ分、見出しがナビの下に隠れないよう余白を確保する */
 .content-heading {
   font-size: 0.95rem;
@@ -405,17 +430,103 @@ table.search-table tr:last-child td { border-bottom: none; }
 .content-card-actions .save-status.is-error { color: var(--st-danger); }
 .content-card-actions .save-status.is-ok { color: var(--st-done); }
 
+/* 追加フォームは編集カード(.content-card)と同じ縦並び(項目を上から順に積む)に統一する。
+   以前はauto-fitで項目を横並びにしていたが、編集カードとの見た目の一貫性を優先し、
+   新規登録・編集どちらも同じ縦並びのレイアウトにする(2026-09-18)。 */
 .content-add-form {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 0.9rem;
-  align-items: end;
-  background: var(--surface);
+  display: block;
+  /* 既存カード(.content-card、背景は白)と区別しやすいよう、うっすら緑がかった
+     --surface-2を背景に使う(入力欄の背景等、他の箇所でも使っている色なのでテーマとして浮かない)。 */
+  background: var(--surface-2);
   border: 1px dashed var(--border-strong);
   border-radius: 8px;
   padding: 1.1rem;
 }
-.content-add-form .field { margin-bottom: 0; }
+.content-add-form .field { margin-bottom: 0.7rem; }
+.content-add-form .field:last-of-type { margin-bottom: 0.9rem; }
+.content-add-form .field input:not([type="checkbox"]),
+.content-add-form .field select,
+.content-add-form .image-preview-box {
+  background: var(--surface);
+}
+/* 新規登録欄であることを示す小さいラベル。評価バッジ(更新のみ・一覧なし)は常時表示のままで
+   よいので<span>のまま、それ以外(特徴カード・ギャラリー・メニュー・スタッフ)は<details>/
+   <summary>で折りたたみ可能にし、デフォルトは閉じておく(縦に長いページになってきたための
+   配慮、2026-09-18)。開閉にJSは使わずネイティブ機能に任せる。 */
+.add-form-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.03em;
+  margin-bottom: 0.7rem;
+}
+summary.add-form-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  margin-bottom: 0;
+}
+summary.add-form-label::-webkit-details-marker { display: none; }
+summary.add-form-label::before {
+  content: '▸';
+  font-size: 0.85em;
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+.content-add-form[open] > summary.add-form-label::before { transform: rotate(90deg); }
+.content-add-form[open] > summary.add-form-label { margin-bottom: 0.9rem; }
+
+/* 画像プレビュー付きカード(ギャラリー写真)。左に入力項目(縦並び)、右に現在の画像を
+   大きく表示する2カラムレイアウト。.card-fields・.image-preview-boxがこの順にDOM上で
+   並んでいれば自動的に列1・列2へ配置される。新規登録・編集カードの両方で使う。 */
+.has-image {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 0.4rem 1.4rem;
+}
+.content-card.has-image .content-card-actions { grid-column: 1 / -1; }
+@media (max-width: 900px) {
+  .has-image { grid-template-columns: minmax(0, 1fr) 220px; }
+}
+@media (max-width: 640px) {
+  .has-image { grid-template-columns: 1fr; }
+}
+.image-preview-box {
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.image-preview-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.image-preview-box .no-image-text { font-size: 0.85rem; color: var(--muted); text-align: center; padding: 0 0.5rem; }
+.image-preview-box.is-uploading, .avatar-preview-inline.is-uploading { opacity: 0.5; }
+
+/* スタッフアバターの小さな丸型プレビュー(ファイル選択欄の隣に表示) */
+.avatar-file-row { display: flex; align-items: center; gap: 0.7rem; }
+.avatar-file-row input[type="file"] { flex: 1; }
+.avatar-preview-inline {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.avatar-preview-inline img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* ---------- 営業日・シフトのカレンダー表示 ---------- */
 .calendar-grid {

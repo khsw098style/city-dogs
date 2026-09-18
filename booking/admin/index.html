@@ -138,8 +138,7 @@
     <!-- LPコンテンツタブ -->
     <section class="tab-panel" data-tab="content">
       <p class="content-note">
-        ここで編集した内容はLPトップページ(CONCEPT / SHOP &amp; STYLE / MENU &amp; PRICE / STAFF)にそのまま反映されます。
-        画像はURL(パス)を直接入力する形式で、アップロード機能は未実装です。
+        ここで編集した内容はLPトップページ(評価バッジ / CONCEPT / SHOP &amp; STYLE / MENU &amp; PRICE / STAFF)にそのまま反映されます。
       </p>
 
       <nav class="content-subnav" aria-label="LPコンテンツ内の移動">
@@ -152,9 +151,10 @@
 
       <h2 class="content-heading" id="content-rating">評価バッジ(★スコア・口コミ件数)</h2>
       <p class="content-note">
-        LPヒーローの「★★★★★ 4.88(11件の口コミ)」表示用の数字です。API連携はしていないため、HotPepper等の実際の掲載ページを見ながら手動で更新してください。
+        LPヒーローの「★★★★★ 4.88(11件の口コミ)」表示用の数字です。API連携はしていないため、<a href="https://www.google.com/maps/place/?q=place_id:ChIJtQi3cGdt5TQRzXXkz1m8DWs" target="_blank" rel="noopener">Googleの口コミ(新しいタブで開きます)</a>を見ながら手動で更新してください。
       </p>
       <form id="ratingForm" class="content-add-form">
+        <span class="add-form-label">＋ 更新</span>
         <div class="field"><label for="ratingScoreInput">評価スコア(0〜5)</label><input type="text" id="ratingScoreInput" inputmode="decimal" required></div>
         <div class="field"><label for="ratingCountInput">口コミ件数</label><input type="text" id="ratingCountInput" inputmode="numeric" required></div>
         <button type="submit" class="btn btn-primary btn-small">保存</button>
@@ -165,30 +165,40 @@
       <div id="featureCards" class="content-card-list">
         <p class="status-text">読み込み中…</p>
       </div>
-      <form id="featureAddForm" class="content-add-form">
-        <div class="field"><label for="featureAddTitle">タイトル</label><input type="text" id="featureAddTitle" required></div>
-        <div class="field"><label for="featureAddDescription">説明文</label><input type="text" id="featureAddDescription" required></div>
-        <div class="field"><label for="featureAddSort">表示順</label><input type="text" id="featureAddSort" inputmode="numeric" value="0"></div>
-        <button type="submit" class="btn btn-ghost btn-small">特徴カードを追加</button>
-      </form>
+      <details class="content-add-form">
+        <summary class="add-form-label">＋ 新規登録</summary>
+        <form id="featureAddForm">
+          <div class="field"><label for="featureAddTitle">タイトル</label><input type="text" id="featureAddTitle" required></div>
+          <div class="field"><label for="featureAddDescription">説明文</label><input type="text" id="featureAddDescription" required></div>
+          <div class="field"><label for="featureAddSort">表示順</label><input type="text" id="featureAddSort" inputmode="numeric" value="0"></div>
+          <button type="submit" class="btn btn-ghost btn-small">特徴カードを追加</button>
+        </form>
+      </details>
 
       <h2 class="content-heading" id="content-gallery">SHOP &amp; STYLE(写真)</h2>
       <div id="galleryCards" class="content-card-list">
         <p class="status-text">読み込み中…</p>
       </div>
-      <form id="galleryAddForm" class="content-add-form">
-        <div class="field">
-          <label for="galleryAddKind">種類</label>
-          <select id="galleryAddKind">
-            <option value="interior">店内メイン写真(interior)</option>
-            <option value="style">スタイル例(style)</option>
-          </select>
-        </div>
-        <div class="field"><label for="galleryAddUrl">画像URL(パス)</label><input type="text" id="galleryAddUrl" placeholder="images/xxx.jpg" required></div>
-        <div class="field"><label for="galleryAddCaption">キャプション</label><input type="text" id="galleryAddCaption"></div>
-        <div class="field"><label for="galleryAddSort">表示順</label><input type="text" id="galleryAddSort" inputmode="numeric" value="0"></div>
-        <button type="submit" class="btn btn-ghost btn-small">写真を追加</button>
-      </form>
+      <details class="content-add-form">
+        <summary class="add-form-label">＋ 新規登録</summary>
+        <form id="galleryAddForm" class="has-image">
+          <div class="card-fields">
+            <div class="field">
+              <label for="galleryAddKind">種類</label>
+              <select id="galleryAddKind">
+                <option value="interior">店内メイン写真(interior)</option>
+                <option value="style">スタイル例(style)</option>
+              </select>
+            </div>
+            <div class="field"><label for="galleryAddFile">画像ファイル</label><input type="file" id="galleryAddFile" accept="image/jpeg,image/png,image/webp,image/gif"></div>
+            <div class="field"><label for="galleryAddCaption">キャプション</label><input type="text" id="galleryAddCaption"></div>
+            <div class="field"><label for="galleryAddSort">表示順</label><input type="text" id="galleryAddSort" inputmode="numeric" value="0"></div>
+            <input type="hidden" id="galleryAddUrl">
+            <button type="submit" class="btn btn-ghost btn-small">写真を追加</button>
+          </div>
+          <div class="image-preview-box" id="galleryAddPreviewBox"><span class="no-image-text">画像未選択</span></div>
+        </form>
+      </details>
 
       <h2 class="content-heading" id="content-menus">MENU &amp; PRICE(メニュー・料金)</h2>
       <p class="content-note">
@@ -197,36 +207,41 @@
       <div id="menuCards" class="content-card-list">
         <p class="status-text">読み込み中…</p>
       </div>
-      <form id="menuAddForm" class="content-add-form">
-        <div class="field"><label for="menuAddName">メニュー名</label><input type="text" id="menuAddName" required></div>
-        <div class="field"><label for="menuAddPrice">価格(円・税込)</label><input type="text" id="menuAddPrice" inputmode="numeric" required></div>
-        <div class="field"><label for="menuAddDuration">所要時間(分)</label><input type="text" id="menuAddDuration" inputmode="numeric" required></div>
-        <div class="field"><label for="menuAddDescription">説明文</label><input type="text" id="menuAddDescription"></div>
-        <div class="field"><label for="menuAddSort">表示順</label><input type="text" id="menuAddSort" inputmode="numeric" value="0"></div>
-        <button type="submit" class="btn btn-ghost btn-small">メニューを追加</button>
-      </form>
+      <details class="content-add-form">
+        <summary class="add-form-label">＋ 新規登録</summary>
+        <form id="menuAddForm">
+          <div class="field"><label for="menuAddName">メニュー名</label><input type="text" id="menuAddName" required></div>
+          <div class="field"><label for="menuAddPrice">価格(円・税込)</label><input type="text" id="menuAddPrice" inputmode="numeric" required></div>
+          <div class="field"><label for="menuAddDuration">所要時間(分)</label><input type="text" id="menuAddDuration" inputmode="numeric" required></div>
+          <div class="field"><label for="menuAddDescription">説明文</label><input type="text" id="menuAddDescription"></div>
+          <div class="field"><label for="menuAddSort">表示順</label><input type="text" id="menuAddSort" inputmode="numeric" value="0"></div>
+          <button type="submit" class="btn btn-ghost btn-small">メニューを追加</button>
+        </form>
+      </details>
 
       <h2 class="content-heading" id="content-staff">STAFF(スタッフ管理・紹介文)</h2>
       <p class="content-note">
         ここでスタッフを追加すると、稼働中(role=stylistかつ「稼働中」)であれば予約画面の指名リストにも自動的に反映されます。
-        ただし実際に予約を受け付けるには、別途シフト設定(現状はSQLでの登録が必要)も必要です。
         過去に予約で使われたことのあるスタッフは削除できません(削除ボタンを押すとエラーになります)。不要になった場合は「稼働中」のチェックを外してください。一度も予約に使われていないスタッフ(登録ミスなど)は削除できます。
       </p>
       <div id="staffBioCards" class="content-card-list">
         <p class="status-text">読み込み中…</p>
       </div>
-      <form id="staffAddForm" class="content-add-form">
-        <div class="field"><label for="staffAddName">氏名</label><input type="text" id="staffAddName" required></div>
-        <div class="field">
-          <label for="staffAddRole">権限区分</label>
-          <select id="staffAddRole">
-            <option value="stylist">スタイリスト(stylist)</option>
-            <option value="assistant">アシスタント(assistant)</option>
-            <option value="owner">オーナー(owner)</option>
-          </select>
-        </div>
-        <button type="submit" class="btn btn-ghost btn-small">スタッフを追加</button>
-      </form>
+      <details class="content-add-form">
+        <summary class="add-form-label">＋ 新規登録</summary>
+        <form id="staffAddForm">
+          <div class="field"><label for="staffAddName">氏名</label><input type="text" id="staffAddName" required></div>
+          <div class="field">
+            <label for="staffAddRole">権限区分</label>
+            <select id="staffAddRole">
+              <option value="stylist">スタイリスト(stylist)</option>
+              <option value="assistant">アシスタント(assistant)</option>
+              <option value="owner">オーナー(owner)</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-ghost btn-small">スタッフを追加</button>
+        </form>
+      </details>
     </section>
 
     <!-- 営業日・シフトタブ -->

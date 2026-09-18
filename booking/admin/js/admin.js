@@ -212,6 +212,91 @@
     return body;
   }
 
+  // LPコンテンツ(ギャラリー写真・スタッフアバター)向けの画像アップロード。
+  // Storageバケットは公開読み取り・書き込みは稼働中スタッフのみ(0010_site_images_storage.sql参照)。
+  // Edge Functionを経由せず、ログイン済みclientから直接Supabase Storageへアップロードする
+  // (image_url/avatar_image_urlはただのtext列で形式検証もないため、ここで得た公開URLを
+  // 既存のテキスト欄にそのまま入れれば、保存フロー自体は一切変更不要)。
+  const SITE_IMAGES_BUCKET = 'site-images';
+  const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+  const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+  async function uploadSiteImage(file, folder) {
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      throw new Error('対応していない画像形式です(jpg/png/webp/gifのみ)。');
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      throw new Error('画像サイズが大きすぎます(5MBまで)。');
+    }
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `${folder}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await client.storage.from(SITE_IMAGES_BUCKET).upload(path, file, { contentType: file.type });
+    if (error) throw new Error(error.message);
+    const { data } = client.storage.from(SITE_IMAGES_BUCKET).getPublicUrl(path);
+    return data.publicUrl;
+  }
+
+  // 差し替え・削除で不要になった画像を後片付けする(失敗しても保存本体は成立させたいので
+  // ベストエフォート。このバケットの画像でなければ何もしない)。
+  function deleteSiteImageIfOwned(url) {
+    if (!url) return;
+    const prefix = `${SUPABASE_URL}/storage/v1/object/public/${SITE_IMAGES_BUCKET}/`;
+    if (!url.startsWith(prefix)) return;
+    const path = url.slice(prefix.length);
+    client.storage.from(SITE_IMAGES_BUCKET).remove([path]).catch(() => {});
+  }
+
+  // lp/images/配下を指す既存データ(相対パス)は、別オリジンの管理画面からは実体を
+  // 参照できない(admin/images/には同じファイルが無い)。blob:URL(アップロード直後の
+  // ローカルプレビュー)やStorageの公開URL(絶対URL)は問題なく表示できる。
+  function isPreviewableUrl(url) {
+    return /^(https?:|blob:)/i.test(url);
+  }
+
+  // プレビュー枠の中身のHTMLを組み立てる(初期レンダリング時のテンプレート文字列と
+  // アップロード後の動的更新の両方から使う共通ロジック)。
+  function previewInnerHtml(url, placeholderText = '画像未選択') {
+    if (url && isPreviewableUrl(url)) return `<img src="${escapeHtml(url)}" alt="">`;
+    if (url) return '<span class="no-image-text">既存の相対パス画像です(この画面ではプレビューできません。LP上の表示でご確認ください)</span>';
+    return placeholderText ? `<span class="no-image-text">${escapeHtml(placeholderText)}</span>` : '';
+  }
+
+  // プレビュー枠(.image-preview-box等)の中身を、画像URLの有無に応じて描画する。
+  function renderImagePreview(previewBox, url, placeholderText = '画像未選択') {
+    if (!previewBox) return;
+    previewBox.innerHTML = previewInnerHtml(url, placeholderText);
+  }
+
+  // ファイル選択時に即アップロードし、結果のURLを対象のテキスト欄へ反映する共通ハンドラ。
+  // previewBoxを渡した場合、選択直後はローカルファイルをそのまま(アップロード完了を待たず)
+  // プレビュー表示し、アップロード完了後に最終的な公開URLへの表示に切り替える。
+  function wireImageFileInput(fileInput, urlInput, folder, previewBox, placeholderText = '画像未選択') {
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      const originalValue = urlInput.value;
+      if (previewBox) {
+        renderImagePreview(previewBox, URL.createObjectURL(file), placeholderText);
+        previewBox.classList.add('is-uploading');
+      }
+      urlInput.disabled = true;
+      urlInput.value = 'アップロード中…';
+      try {
+        const uploadedUrl = await uploadSiteImage(file, folder);
+        urlInput.value = uploadedUrl;
+        if (previewBox) renderImagePreview(previewBox, uploadedUrl, placeholderText);
+      } catch (err) {
+        alert(`画像のアップロードに失敗しました: ${err.message}`);
+        urlInput.value = originalValue;
+        if (previewBox) renderImagePreview(previewBox, originalValue, placeholderText);
+      } finally {
+        urlInput.disabled = false;
+        fileInput.value = '';
+        if (previewBox) previewBox.classList.remove('is-uploading');
+      }
+    });
+  }
+
   // ---------------------------------------------------------------
   // Auth
   // ---------------------------------------------------------------
@@ -379,22 +464,36 @@
       }
     });
 
+    wireImageFileInput(
+      document.getElementById('galleryAddFile'),
+      document.getElementById('galleryAddUrl'),
+      'gallery',
+      document.getElementById('galleryAddPreviewBox'),
+    );
+
     el.galleryAddForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const submitBtn = el.galleryAddForm.querySelector('button[type="submit"]');
+      const imageUrl = document.getElementById('galleryAddUrl').value.trim();
+      if (!imageUrl) {
+        alert('画像ファイルを選択してください。');
+        return;
+      }
       submitBtn.disabled = true;
       try {
         await apiFetch('admin-site-content', '/gallery', {
           method: 'POST',
           body: {
             kind: document.getElementById('galleryAddKind').value,
-            image_url: document.getElementById('galleryAddUrl').value.trim(),
+            image_url: imageUrl,
             caption: document.getElementById('galleryAddCaption').value.trim(),
             sort_order: Number(document.getElementById('galleryAddSort').value) || 0,
           },
         });
         el.galleryAddForm.reset();
         document.getElementById('galleryAddSort').value = '0';
+        document.getElementById('galleryAddUrl').value = '';
+        renderImagePreview(document.getElementById('galleryAddPreviewBox'), null);
         await loadGallery();
       } catch (err) {
         alert(`写真の追加に失敗しました: ${err.message}`);
@@ -964,18 +1063,22 @@
       return;
     }
     el.galleryCards.innerHTML = photos.map((p) => `
-      <div class="content-card" data-id="${p.id}">
-        <div class="field">
-          <label>種類</label>
-          <select class="f-kind">
-            <option value="interior" ${p.kind === 'interior' ? 'selected' : ''}>店内メイン写真(interior)</option>
-            <option value="style" ${p.kind === 'style' ? 'selected' : ''}>スタイル例(style)</option>
-          </select>
+      <div class="content-card has-image" data-id="${p.id}" data-original-url="${escapeHtml(p.image_url)}">
+        <div class="card-fields">
+          <div class="field">
+            <label>種類</label>
+            <select class="f-kind">
+              <option value="interior" ${p.kind === 'interior' ? 'selected' : ''}>店内メイン写真(interior)</option>
+              <option value="style" ${p.kind === 'style' ? 'selected' : ''}>スタイル例(style)</option>
+            </select>
+          </div>
+          <div class="field"><label>画像ファイル(差し替え)</label><input type="file" class="f-file" accept="image/jpeg,image/png,image/webp,image/gif"></div>
+          <div class="field"><label>キャプション</label><input type="text" class="f-caption" value="${escapeHtml(p.caption ?? '')}"></div>
+          <div class="field"><label>表示順</label><input type="text" inputmode="numeric" class="f-sort" value="${p.sort_order}"></div>
+          <div class="field"><label><input type="checkbox" class="f-active" ${p.is_active ? 'checked' : ''}> LPに公開する</label></div>
+          <input type="hidden" class="f-url" value="${escapeHtml(p.image_url)}">
         </div>
-        <div class="field"><label>画像URL(パス)</label><input type="text" class="f-url" value="${escapeHtml(p.image_url)}"></div>
-        <div class="field"><label>キャプション</label><input type="text" class="f-caption" value="${escapeHtml(p.caption ?? '')}"></div>
-        <div class="field"><label>表示順</label><input type="text" inputmode="numeric" class="f-sort" value="${p.sort_order}"></div>
-        <div class="field"><label><input type="checkbox" class="f-active" ${p.is_active ? 'checked' : ''}> LPに公開する</label></div>
+        <div class="image-preview-box">${previewInnerHtml(p.image_url)}</div>
         <div class="content-card-actions">
           <button type="button" class="btn btn-primary btn-small save-btn">保存</button>
           <button type="button" class="btn btn-ghost btn-small delete-btn">削除</button>
@@ -984,22 +1087,32 @@
       </div>
     `).join('');
 
+    el.galleryCards.querySelectorAll('.content-card').forEach((card) => {
+      wireImageFileInput(card.querySelector('.f-file'), card.querySelector('.f-url'), 'gallery', card.querySelector('.image-preview-box'));
+    });
+
     el.galleryCards.querySelectorAll('.save-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const card = btn.closest('.content-card');
         const statusEl = card.querySelector('.save-status');
+        const previousUrl = card.dataset.originalUrl;
+        const newUrl = card.querySelector('.f-url').value.trim();
         btn.disabled = true;
         try {
           await apiFetch('admin-site-content', `/gallery/${card.dataset.id}`, {
             method: 'PATCH',
             body: {
               kind: card.querySelector('.f-kind').value,
-              image_url: card.querySelector('.f-url').value.trim(),
+              image_url: newUrl,
               caption: card.querySelector('.f-caption').value.trim(),
               sort_order: Number(card.querySelector('.f-sort').value) || 0,
               is_active: card.querySelector('.f-active').checked,
             },
           });
+          if (newUrl !== previousUrl) {
+            deleteSiteImageIfOwned(previousUrl);
+            card.dataset.originalUrl = newUrl;
+          }
           showSaveStatus(statusEl, '保存しました', true);
         } catch (err) {
           showSaveStatus(statusEl, `保存に失敗: ${err.message}`, false);
@@ -1016,6 +1129,7 @@
         btn.disabled = true;
         try {
           await apiFetch('admin-site-content', `/gallery/${card.dataset.id}`, { method: 'DELETE' });
+          deleteSiteImageIfOwned(card.dataset.originalUrl);
           await loadGallery();
         } catch (err) {
           alert(`削除に失敗しました: ${err.message}`);
@@ -1118,7 +1232,7 @@
       return;
     }
     el.staffBioCards.innerHTML = staffList.map((s) => `
-      <div class="content-card" data-id="${s.id}">
+      <div class="content-card" data-id="${s.id}" data-original-avatar="${escapeHtml(s.avatar_image_url ?? '')}">
         <div class="field"><label>氏名</label><input type="text" class="f-name" value="${escapeHtml(s.name)}"></div>
         <div class="field">
           <label>権限区分</label>
@@ -1133,7 +1247,14 @@
         <div class="field"><label>英語表記名</label><input type="text" class="f-name-en" value="${escapeHtml(s.name_en ?? '')}"></div>
         <div class="field"><label>肩書き(LP表示用)</label><input type="text" class="f-role-label" value="${escapeHtml(s.bio_role_label ?? '')}" placeholder="例: スタイリスト / 理容歴4年"></div>
         <div class="field"><label>紹介コメント</label><input type="text" class="f-comment" value="${escapeHtml(s.bio_comment ?? '')}"></div>
-        <div class="field"><label>アバター画像URL(パス)</label><input type="text" class="f-avatar" value="${escapeHtml(s.avatar_image_url ?? '')}" placeholder="未設定時はアイコン表示"></div>
+        <div class="field">
+          <label>アバター画像</label>
+          <div class="avatar-file-row">
+            <div class="avatar-preview-inline">${previewInnerHtml(s.avatar_image_url, '')}</div>
+            <input type="file" class="f-avatar-file" accept="image/jpeg,image/png,image/webp,image/gif">
+          </div>
+        </div>
+        <input type="hidden" class="f-avatar" value="${escapeHtml(s.avatar_image_url ?? '')}">
         <div class="content-card-actions">
           <button type="button" class="btn btn-primary btn-small save-btn">保存</button>
           <button type="button" class="btn btn-ghost btn-small delete-btn">削除</button>
@@ -1142,10 +1263,16 @@
       </div>
     `).join('');
 
+    el.staffBioCards.querySelectorAll('.content-card').forEach((card) => {
+      wireImageFileInput(card.querySelector('.f-avatar-file'), card.querySelector('.f-avatar'), 'staff-avatars', card.querySelector('.avatar-preview-inline'), '');
+    });
+
     el.staffBioCards.querySelectorAll('.save-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const card = btn.closest('.content-card');
         const statusEl = card.querySelector('.save-status');
+        const previousAvatar = card.dataset.originalAvatar;
+        const newAvatar = card.querySelector('.f-avatar').value.trim();
         btn.disabled = true;
         try {
           await apiFetch('admin-site-content', `/staff/${card.dataset.id}`, {
@@ -1158,9 +1285,13 @@
               name_en: card.querySelector('.f-name-en').value.trim(),
               bio_role_label: card.querySelector('.f-role-label').value.trim(),
               bio_comment: card.querySelector('.f-comment').value.trim(),
-              avatar_image_url: card.querySelector('.f-avatar').value.trim(),
+              avatar_image_url: newAvatar,
             },
           });
+          if (newAvatar !== previousAvatar) {
+            deleteSiteImageIfOwned(previousAvatar);
+            card.dataset.originalAvatar = newAvatar;
+          }
           showSaveStatus(statusEl, '保存しました', true);
         } catch (err) {
           showSaveStatus(statusEl, `保存に失敗: ${err.message}`, false);
@@ -1179,6 +1310,7 @@
         btn.disabled = true;
         try {
           await apiFetch('admin-site-content', `/staff/${card.dataset.id}`, { method: 'DELETE' });
+          deleteSiteImageIfOwned(card.dataset.originalAvatar);
           await loadStaffBios();
         } catch (err) {
           alert(`削除に失敗しました: ${err.message}`);

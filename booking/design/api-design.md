@@ -39,7 +39,7 @@
 | GET | `/admin/customers` | 電話番号(前方一致)・氏名(部分一致)での顧客検索 | お客様管理 | ✅実装・デプロイ済み(2026-09-16) |
 | GET/PATCH | `/admin/customers/:id` | 顧客詳細(直近の予約履歴込み)の閲覧・氏名/電話番号/メール/メモ/`no_show_count`/`is_blocked`更新 | お客様管理 | ✅実装・デプロイ済み(2026-09-16) |
 | GET/POST/PATCH/DELETE | `/admin/site-content/features` | LP「CONCEPT」カードのCRUD | (該当なし。LP専用) | ✅実装・デプロイ済み(2026-09-13) |
-| GET/POST/PATCH/DELETE | `/admin/site-content/gallery` | LP「SHOP & STYLE」写真のCRUD(`image_url`は当面テキスト入力。アップロード機能は未実装) | (該当なし。LP専用) | ✅実装・デプロイ済み(2026-09-13) |
+| GET/POST/PATCH/DELETE | `/admin/site-content/gallery` | LP「SHOP & STYLE」写真のCRUD(`image_url`はテキスト列。管理画面からSupabase Storageへの直接アップロードにも対応、2026-09-18) | (該当なし。LP専用) | ✅実装・デプロイ済み(2026-09-13、画像アップロードは2026-09-18) |
 | GET/POST/PATCH/DELETE | `/admin/site-content/staff` | スタッフの追加・更新・削除(氏名/権限区分/稼働状況/表示順の業務項目と、`name_en`/`bio_role_label`/`bio_comment`/`avatar_image_url`のLP紹介文を同じリソースとして扱う)。予約実績が一度でもあると`reservations.staff_id`の外部キー制約で削除できず`VALIDATION_ERROR`を返す。その場合は`is_active=false`で退職等を表現 | 掲載管理(スタッフ) | ✅実装・デプロイ済み(2026-09-13、DELETE追加は2026-09-16) |
 | GET/PUT | `/admin/site-content/rating` | LPヒーローの評価バッジ(★スコア0〜5・口コミ件数)を手動更新。`site_rating`テーブル(1行のみ、作成・削除なし) | 掲載管理(評価バッジ) | ✅実装・デプロイ済み(2026-09-17。Google Places API連携の撤回に伴う代替実装) |
 
