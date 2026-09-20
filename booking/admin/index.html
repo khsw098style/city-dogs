@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
-<!-- 🏪 店舗固有: title・店舗名がハードコードされている箇所を含む(login-title/app-title等)。
+<!-- 🏪 店舗固有: title・店舗名がハードコードされている箇所を含む(login-title/brand-name等)。
      新しい店舗向けに複製する場合はこのファイル全体を確認して書き換えること。
      手順は最上位の TEMPLATE.md を参照。 -->
 <head>
@@ -51,7 +51,10 @@
   <header class="app-header">
     <div class="app-header-left">
       <span class="brand-mark" aria-hidden="true"><img src="images/logo-mark.png" alt=""></span>
-      <span class="app-title">City Dogs 予約管理</span>
+      <span class="brand-text">
+        <span class="brand-name">City Dogs</span>
+        <span class="brand-sub">STAFF ADMIN</span>
+      </span>
     </div>
     <div class="app-header-right">
       <span class="staff-name" id="staffName"></span>
@@ -61,12 +64,12 @@
   </header>
 
   <nav class="tab-bar">
-    <button type="button" class="tab-btn is-active" data-tab="schedule">スケジュール</button>
-    <button type="button" class="tab-btn" data-tab="search">予約検索</button>
-    <button type="button" class="tab-btn" data-tab="content">LPコンテンツ</button>
-    <button type="button" class="tab-btn" data-tab="shifts">営業日・シフト</button>
-    <button type="button" class="tab-btn" data-tab="customers">顧客管理</button>
-    <button type="button" class="tab-btn" data-tab="revenue">売上予定・実績</button>
+    <button type="button" class="tab-btn is-active" data-tab="schedule"><img src="images/schedule.png" alt=""><span>スケジュール</span></button>
+    <button type="button" class="tab-btn" data-tab="search"><img src="images/search.png" alt=""><span>予約検索</span></button>
+    <button type="button" class="tab-btn" data-tab="content"><img src="images/content.png" alt=""><span>LPコンテンツ</span></button>
+    <button type="button" class="tab-btn" data-tab="shifts"><img src="images/shifts.png" alt=""><span>営業日・シフト</span></button>
+    <button type="button" class="tab-btn" data-tab="customers"><img src="images/customers.png" alt=""><span>顧客管理</span></button>
+    <button type="button" class="tab-btn" data-tab="revenue"><img src="images/revenue.png" alt=""><span>売上予定・実績</span></button>
   </nav>
 
   <main class="app-main">

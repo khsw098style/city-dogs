@@ -59,8 +59,17 @@
     return escapeHtml(str).replace(/&lt;br\s*\/?&gt;/gi, '<br>');
   }
 
+  // DB不調・通信環境が悪い等で取得に失敗した場合の表示。ITに詳しくないお客様でも
+  // ブラウザの再読み込み操作を知っているとは限らないため、その場で押せる
+  // 「再読み込み」ボタンを用意する(押すとページ全体をリロードする、最も確実な方法)。
   function showLoadError(container, message) {
-    container.innerHTML = `<p class="menu-note">${escapeHtml(message)}</p>`;
+    container.innerHTML = `
+      <p class="menu-note load-error">
+        ${escapeHtml(message)}
+        <button type="button" class="btn btn-primary btn-small reload-btn">再読み込み</button>
+      </p>
+    `;
+    container.querySelector('.reload-btn')?.addEventListener('click', () => location.reload());
   }
 
   function renderFeatures(features) {

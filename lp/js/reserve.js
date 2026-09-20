@@ -142,7 +142,7 @@
       state.menus = data.menus || [];
       renderMenuList();
     } catch (err) {
-      el.menuList.innerHTML = `<p class="wizard-status">メニューの取得に失敗しました。時間をおいて再度お試しください。<br><span style="color:var(--text-faint,var(--muted))">(${escapeHtml(err.message)})</span></p>`;
+      renderErrorWithReload(el.menuList, 'メニューの取得に失敗しました。時間をおいて再度お試しください。', err.message);
     }
   }
 
@@ -267,7 +267,7 @@
       state.slots = data.slots || [];
       renderSlots(data);
     } catch (err) {
-      el.slotArea.innerHTML = `<p class="wizard-status">空き状況の取得に失敗しました。<br><span style="color:var(--text-faint,var(--muted))">(${escapeHtml(err.message)})</span></p>`;
+      renderErrorWithReload(el.slotArea, '空き状況の取得に失敗しました。', err.message);
     }
   }
 
@@ -453,6 +453,26 @@
     return String(str ?? '').replace(/[&<>"']/g, (c) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     }[c]));
+  }
+
+  // DB不調・通信環境が悪い等での取得失敗時、ITに詳しくないお客様でもその場で押せるよう
+  // 「再読み込み」ボタンを添える(押すとページ全体をリロードする、最も確実な方法)。
+  // site-content.js(トップページ)と同じ考え方。
+  function errorMessageWithReload(message, detail) {
+    const detailHtml = detail
+      ? `<br><span style="color:var(--text-faint,var(--muted))">(${escapeHtml(detail)})</span>`
+      : '';
+    return `
+      <p class="wizard-status load-error">
+        ${escapeHtml(message)}${detailHtml}
+        <button type="button" class="btn btn-primary btn-small reload-btn">再読み込み</button>
+      </p>
+    `;
+  }
+
+  function renderErrorWithReload(container, message, detail) {
+    container.innerHTML = errorMessageWithReload(message, detail);
+    container.querySelector('.reload-btn')?.addEventListener('click', () => location.reload());
   }
 
   // ---------------------------------------------------------------

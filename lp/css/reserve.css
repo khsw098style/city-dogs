@@ -99,6 +99,7 @@
   margin: 0;
   padding: 1rem 0;
 }
+.wizard-status.load-error { display: flex; flex-direction: column; align-items: center; gap: 0.8rem; text-align: center; }
 .wizard-actions {
   display: flex;
   flex-wrap: wrap;
