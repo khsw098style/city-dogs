@@ -120,6 +120,7 @@ button, input, select, textarea { font-family: inherit; }
 .field input:not([type="checkbox"]),
 input[type="text"], input[type="email"], input[type="password"], input[type="date"], select {
   width: 100%;
+  max-width: 100%;
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
   border-radius: 6px;
@@ -130,6 +131,12 @@ input[type="text"], input[type="email"], input[type="password"], input[type="dat
 }
 .field input:focus,
 input:focus, select:focus { outline: none; border-color: var(--accent); }
+
+/* iOS Safari(Brave等のiOS版含む。iOSは全ブラウザがWebKit採用のため同じ挙動になる)は
+   input[type="date"]を独自の「ピル型」ボタンとして描画し、width/max-widthのCSS指定を
+   無視して内部コンテンツ優先の幅で表示することがある。-webkit-appearance: noneで
+   このネイティブ描画自体をやめさせ、通常のテキスト入力と同じボックスモデルに従わせる。 */
+input[type="date"] { -webkit-appearance: none; appearance: none; }
 
 /* チェックボックス+ラベル文言(例: 「LPに公開する」)は「☑ 文言」の1行で左揃えにする。
    上のルールがcheckboxにもwidth:100%等を効かせてしまい、巨大な四角形の下に文言が
@@ -209,11 +216,14 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   gap: 1.2rem;
   padding: 0.8rem 1.5rem 0;
   border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .tab-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
+  flex-shrink: 0;
   gap: 0.3rem;
   background: transparent;
   border: none;
@@ -382,7 +392,17 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   border-radius: 8px;
   padding: 1.2rem;
   margin-bottom: 1.2rem;
+  /* iOS Safari等はinput[type="date"]の内部部品(年/月/日+アイコン)を
+     CSS上のwidthより優先して描画することがあり、1カラム化しても
+     カードの白枠から実際にはみ出すケースが確認された。グリッド計算に
+     頼らず、カード自体で強制的に切り取って枠外に出さないようにする。 */
+  overflow: hidden;
 }
+/* input[type="date"]はスマホブラウザだと内部コントロールの実測サイズが
+   grid-template-columnsのminmax(150px,...)トラック幅を超えることがあり、
+   グリッドアイテムのデフォルトmin-width:autoのせいでそのままはみ出す。
+   明示的にmin-width:0にしてトラック幅に収まるようにする。 */
+.search-field { min-width: 0; }
 .search-field label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 0.35rem; }
 .search-submit { display: flex; align-items: flex-end; }
 .search-submit .btn { width: 100%; }
@@ -701,4 +721,8 @@ summary.add-form-label::before {
   .date-nav { flex-wrap: wrap; }
   .modal-backdrop { padding: 0; align-items: stretch; }
   .modal { max-width: none; border-radius: 0; min-height: 100%; }
+  /* input[type="date"]はスマホブラウザだと内部部品の最小幅が広く、2カラムだと
+     minmax(150px,1fr)より縮められず隣の列にはみ出す。狭い画面では確実に
+     1カラムにして、日付欄が常にフル幅を確保できるようにする。 */
+  .search-form { grid-template-columns: 1fr; }
 }
