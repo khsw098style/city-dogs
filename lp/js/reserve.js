@@ -30,9 +30,30 @@
   const jstTimeFmt = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hour12: false });
   const yenFmt = new Intl.NumberFormat('ja-JP');
 
+  // メニューの区分(menus.category)。表示順と見出し。LPのメニュー表示(site-content.js)と同じ定義。
+  // 選択ルール(サーバー側 _shared/menuSelection.ts が最終防御): cut/colorは各区分から最大1つ、permはパーマ・ツイストを
+  // 併用できる(複数可)。cut/color/permのどれか1つは必須。optionは主メニューへの追加専用で何個でも選べる。
+  const CATEGORY_ORDER = ['cut', 'color', 'perm', 'option'];
+  const MAIN_CATEGORIES = new Set(['cut', 'color', 'perm']);
+  const SINGLE_SELECT_CATEGORIES = new Set(['cut', 'color']);
+  const CATEGORY_META = {
+    cut: { label: 'カット', hint: 'お一人につき1つお選びください' },
+    color: { label: 'カラー', hint: 'カットとの組み合わせも、カラーのみもOK' },
+    perm: { label: 'パーマ', hint: 'パーマ・ツイストは、片方だけでも両方でもOK' },
+    option: { label: 'オプション', hint: 'ご一緒にいかがですか?いくつでも追加できます' },
+  };
+
+  function menuCategory(menu) {
+    return menu.category ?? 'cut';
+  }
+  // 「〜」付き(下限価格)のメニューを含む合計は「¥9,500〜」と表示する。
+  function formatPrice(price, isFrom) {
+    return `¥${yenFmt.format(price)}${isFrom ? '〜' : ''}`;
+  }
   const state = {
     menus: [],
-    selectedMenu: null,
+    // 選択中のメニューID(主メニュー+オプションの複数選択)。選択ルールはtoggleMenu()参照。
+    selectedMenuIds: new Set(),
     staffList: [],
     selectedStaffId: '', // 担当スタイリストの指名は必須(2026-09-18〜)。空は「まだ選択されていない」
     selectedDate: null, // 'YYYY-MM-DD'
@@ -42,6 +63,7 @@
 
   const el = {
     menuList: document.getElementById('menuList'),
+    selectionSummary: document.getElementById('selectionSummary'),
     toStep2: document.getElementById('toStep2'),
     staffSelect: document.getElementById('staffSelect'),
     dateInput: document.getElementById('dateInput'),
@@ -180,36 +202,117 @@
     }
 
     el.menuList.innerHTML = '';
-    state.menus.forEach((menu) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'option-card';
-      btn.dataset.id = menu.id;
-      btn.innerHTML = `
-        <span class="option-card-main">
-          <h3>${escapeHtml(menu.name)}</h3>
-          ${menu.description ? `<p>${escapeHtml(menu.description)}</p>` : ''}
-        </span>
-        <span class="option-card-meta">
-          <span class="option-card-price">¥${yenFmt.format(menu.price)}</span>
-          <span class="option-card-duration">約${menu.duration_minutes}分</span>
-        </span>
+    CATEGORY_ORDER.forEach((category) => {
+      const menus = state.menus.filter((m) => menuCategory(m) === category);
+      if (menus.length === 0) return;
+
+      const group = document.createElement('div');
+      group.className = 'menu-group';
+      group.dataset.category = category;
+      if (category === 'option') {
+        // オプションは主メニューを選んだあとに「ご一緒にいかがですか?」と表示する(選ぶまでは非表示)。
+        group.classList.add('is-addon');
+        group.hidden = true;
+      }
+
+      const meta = CATEGORY_META[category];
+      group.innerHTML = `
+        <h3 class="menu-group-heading">${meta.label}<span class="menu-group-hint">${meta.hint}</span></h3>
       `;
-      btn.addEventListener('click', () => selectMenu(menu, btn));
-      el.menuList.appendChild(btn);
+
+      menus.forEach((menu) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'option-card';
+        btn.dataset.id = menu.id;
+        btn.setAttribute('aria-pressed', 'false');
+        btn.innerHTML = `
+          <span class="option-card-main">
+            <h3>${escapeHtml(menu.name)}</h3>
+            ${menu.description ? `<p>${escapeHtml(menu.description)}</p>` : ''}
+          </span>
+          <span class="option-card-meta">
+            <span class="option-card-price">${formatPrice(menu.price, menu.price_is_from)}</span>
+            <span class="option-card-duration">約${menu.duration_minutes}分</span>
+          </span>
+        `;
+        btn.addEventListener('click', () => toggleMenu(menu));
+        group.appendChild(btn);
+      });
+      el.menuList.appendChild(group);
     });
+    refreshMenuSelectionUi();
   }
 
-  function selectMenu(menu, btnEl) {
-    state.selectedMenu = menu;
-    el.menuList.querySelectorAll('.option-card').forEach((c) => c.classList.remove('is-selected'));
-    btnEl.classList.add('is-selected');
-    el.toStep2.disabled = false;
+  // 選択中のメニュー(区分順)と、その合計。サーバー側の計算(menuSelection.ts)と同じく単純合算。
+  function getSelection() {
+    const items = state.menus
+      .filter((m) => state.selectedMenuIds.has(m.id))
+      .sort((a, b) => CATEGORY_ORDER.indexOf(menuCategory(a)) - CATEGORY_ORDER.indexOf(menuCategory(b)));
+    return {
+      items,
+      ids: items.map((m) => m.id),
+      name: items.map((m) => m.name).join(' + '),
+      price: items.reduce((sum, m) => sum + m.price, 0),
+      duration: items.reduce((sum, m) => sum + m.duration_minutes, 0),
+      priceIsFrom: items.some((m) => m.price_is_from),
+      hasMain: items.some((m) => MAIN_CATEGORIES.has(menuCategory(m))),
+    };
+  }
+
+  function toggleMenu(menu) {
+    const category = menuCategory(menu);
+    if (state.selectedMenuIds.has(menu.id)) {
+      state.selectedMenuIds.delete(menu.id);
+    } else {
+      if (SINGLE_SELECT_CATEGORIES.has(category)) {
+        // 同じ区分(カット同士など)は1つだけ。選び直したら前の選択を外す。
+        state.menus.filter((m) => menuCategory(m) === category).forEach((m) => state.selectedMenuIds.delete(m.id));
+      }
+      state.selectedMenuIds.add(menu.id);
+    }
+
+    // 主メニューが1つもなければ、オプションだけが残らないよう外す(オプション単独では予約できない)。
+    if (!getSelection().hasMain) {
+      state.menus.filter((m) => menuCategory(m) === 'option').forEach((m) => state.selectedMenuIds.delete(m.id));
+    }
+
+    refreshMenuSelectionUi();
 
     // メニューを変えたら、選び直しになるので日時選択をリセットする
     state.selectedDate = null;
     state.selectedSlot = null;
     el.toStep3.disabled = true;
+  }
+
+  function refreshMenuSelectionUi() {
+    const selection = getSelection();
+
+    el.menuList.querySelectorAll('.option-card').forEach((card) => {
+      const selected = state.selectedMenuIds.has(card.dataset.id);
+      card.classList.toggle('is-selected', selected);
+      card.setAttribute('aria-pressed', String(selected));
+    });
+    const addonGroup = el.menuList.querySelector('.menu-group.is-addon');
+    if (addonGroup) addonGroup.hidden = !selection.hasMain;
+
+    el.toStep2.disabled = !selection.hasMain;
+
+    if (selection.items.length === 0) {
+      el.selectionSummary.hidden = true;
+      el.selectionSummary.innerHTML = '';
+      return;
+    }
+    el.selectionSummary.hidden = false;
+    el.selectionSummary.innerHTML = `
+      <p class="selection-summary-names">${escapeHtml(selection.name)}</p>
+      <p class="selection-summary-total">
+        <span>合計</span>
+        <span class="selection-summary-price">${formatPrice(selection.price, selection.priceIsFrom)}</span>
+        <span>所要時間の目安 約${selection.duration}分</span>
+      </p>
+      ${selection.priceIsFrom ? '<p class="selection-summary-note">※「〜」付きのメニューを含むため、確定金額はご来店時にご案内します。</p>' : ''}
+    `;
   }
 
   el.toStep2.addEventListener('click', () => {
@@ -252,7 +355,8 @@
     state.selectedDate = date;
     el.slotArea.innerHTML = '<p class="wizard-status">空き状況を確認しています…</p>';
 
-    if (!state.selectedMenu) {
+    const selection = getSelection();
+    if (!selection.hasMain) {
       el.slotArea.innerHTML = '<p class="wizard-status">先にメニューを選択してください。</p>';
       return;
     }
@@ -262,7 +366,7 @@
     }
 
     try {
-      const params = new URLSearchParams({ date, menu_id: state.selectedMenu.id, staff_id: state.selectedStaffId });
+      const params = new URLSearchParams({ date, menu_ids: selection.ids.join(','), staff_id: state.selectedStaffId });
       const data = await apiFetch(`/availability?${params.toString()}`);
       state.slots = data.slots || [];
       renderSlots(data);
@@ -332,18 +436,19 @@
   });
 
   function renderSummary() {
-    const { selectedMenu, selectedSlot } = state;
-    if (!selectedMenu || !selectedSlot) return;
+    const { selectedSlot } = state;
+    const selection = getSelection();
+    if (!selection.hasMain || !selectedSlot) return;
 
     const start = new Date(selectedSlot.start_at);
-    const end = new Date(start.getTime() + selectedMenu.duration_minutes * 60 * 1000);
+    const end = new Date(start.getTime() + selection.duration * 60 * 1000);
 
     el.summaryBox.innerHTML = `
       <dl>
-        <dt>メニュー</dt><dd>${escapeHtml(selectedMenu.name)}</dd>
+        <dt>メニュー</dt><dd>${selection.items.map((m) => escapeHtml(m.name)).join('<br>')}</dd>
         <dt>日時</dt><dd>${jstDateFmt.format(start)} ${jstTimeFmt.format(start)}〜${jstTimeFmt.format(end)}</dd>
         <dt>担当</dt><dd>${escapeHtml(selectedSlot.staff_name)}</dd>
-        <dt>料金</dt><dd class="summary-price">¥${yenFmt.format(selectedMenu.price)}</dd>
+        <dt>料金</dt><dd class="summary-price">${formatPrice(selection.price, selection.priceIsFrom)}</dd>
       </dl>
     `;
   }
@@ -360,7 +465,8 @@
     if (!name) return showFormError('お名前を入力してください。');
     if (!PHONE_RE.test(phone)) return showFormError('電話番号の形式が正しくありません(例: 090-1234-5678)。');
     if (!EMAIL_RE.test(email)) return showFormError('メールアドレスの形式が正しくありません。');
-    if (!state.selectedMenu || !state.selectedSlot) return showFormError('メニューまたは日時が選択されていません。最初からやり直してください。');
+    const selection = getSelection();
+    if (!selection.hasMain || !state.selectedSlot) return showFormError('メニューまたは日時が選択されていません。最初からやり直してください。');
     if (!turnstileToken) return showFormError('ロボットでないことの確認が完了していません。少し待ってから再度お試しください。');
 
     el.submitBtn.disabled = true;
@@ -371,7 +477,7 @@
         method: 'POST',
         body: JSON.stringify({
           customer: { name, phone, email },
-          menu_id: state.selectedMenu.id,
+          menu_ids: selection.ids,
           staff_id: state.selectedSlot.staff_id,
           start_at: state.selectedSlot.start_at,
           notes,
@@ -430,10 +536,10 @@
         <p class="result-number">${escapeHtml(result.reservation_number)}</p>
         <div class="result-details">
           <dl>
-            <dt>メニュー</dt><dd>${escapeHtml(state.selectedMenu.name)}</dd>
+            <dt>メニュー</dt><dd>${escapeHtml(result.menu_name || '')}</dd>
             <dt>日時</dt><dd>${jstDateFmt.format(start)} ${jstTimeFmt.format(start)}〜${jstTimeFmt.format(end)}</dd>
             <dt>担当</dt><dd>${escapeHtml(result.staff_name || '')}</dd>
-            <dt>料金</dt><dd>¥${yenFmt.format(result.price)}</dd>
+            <dt>料金</dt><dd>${formatPrice(result.price, result.price_is_from)}</dd>
           </dl>
         </div>
         <p style="font-size:0.82rem;color:var(--muted)">ご入力いただいたメールアドレス宛に、予約の確認・変更・キャンセルができるリンクをお送りしました。予約番号とご登録の電話番号も、お問い合わせの際に必要です。控えておいてください。</p>

@@ -125,8 +125,43 @@ async function run() {
     await page.waitForSelector('.option-card', { timeout: 10000 });
     await page.screenshot({ path: path.join(shotDir, '1-menu.png') });
 
-    // STEP 1: メニュー選択(先頭のメニューを選ぶ)
-    await page.click('.option-card:first-child');
+    // STEP 1: メニュー選択(複数選択: カット + 顔剃り。2026-09-24〜、カット/カラー/パーマ+オプションの組み合わせ選択)
+    const card = (name) => page.locator('.option-card', { has: page.locator('h3', { hasText: new RegExp('^' + name + '$') }) });
+    if (!(await page.locator('#toStep2').isDisabled())) throw new Error('メニュー未選択なのに「次へ」が押せる状態です。');
+    if (await page.locator('.menu-group.is-addon').isVisible()) throw new Error('主メニュー未選択なのにオプションが表示されています。');
+
+    await card('カット').click();
+    if (!(await page.locator('.menu-group.is-addon').isVisible())) throw new Error('カット選択後にオプションが表示されません。');
+
+    // カット+パーマ: 単純加算(4,000+5,500)で、パーマが「〜」付きなので合計も「〜」
+    await card('パーマ').click();
+    const permTotal = await page.locator('#selectionSummary').innerText();
+    if (!permTotal.includes('¥9,500〜')) throw new Error('カット+パーマの合計が「¥9,500〜」になっていません: ' + permTotal);
+    // パーマとツイストは併用できる(カット+パーマ+ツイスト=4,000+5,500+6,000、60+60+60分)
+    await card('ツイスト').click();
+    const permTwistTotal = await page.locator('#selectionSummary').innerText();
+    if (!permTwistTotal.includes('¥15,500〜') || !permTwistTotal.includes('約180分')) throw new Error('カット+パーマ+ツイストの合計が「¥15,500〜・約180分」になっていません: ' + permTwistTotal);
+    if ((await card('パーマ').getAttribute('aria-pressed')) !== 'true') throw new Error('ツイストを選ぶとパーマの選択が外れています(併用できるはず)。');
+    await card('ツイスト').click(); // 解除
+    await card('パーマ').click(); // 解除
+    // 同じ区分は1つだけ: 別のカットを選ぶと最初のカットが外れる
+    await card('高校生カット').click();
+    if ((await card('カット').getAttribute('aria-pressed')) !== 'false') throw new Error('同じ区分のカットが同時に選択されています。');
+    await card('カット').click();
+
+    await card('顔剃り').click();
+    const summary = await page.locator('#selectionSummary').innerText();
+    if (!summary.includes('カット + 顔剃り') || !summary.includes('¥4,800') || !summary.includes('約75分')) {
+      throw new Error('カット+顔剃りの合計表示が想定と異なります(4,800円・約75分): ' + summary);
+    }
+    // 主メニューを外すとオプションだけが残らない(オプション単独では予約できない)
+    await card('カット').click();
+    if ((await card('顔剃り').getAttribute('aria-pressed')) !== 'false') throw new Error('主メニューを外してもオプションが残っています。');
+    if (!(await page.locator('#toStep2').isDisabled())) throw new Error('主メニューなしで「次へ」が押せる状態です。');
+    await card('カット').click();
+    await card('顔剃り').click();
+    await page.screenshot({ path: path.join(shotDir, '1b-menu-selected.png'), fullPage: true });
+
     await page.click('#toStep2');
     await page.waitForSelector('#stepDatetime.is-active');
 
@@ -185,6 +220,10 @@ async function run() {
       throw new Error(`指名したスタイリスト「${selectedStaffName}」が完了画面の担当者に反映されていません。`);
     }
     console.log('指名どおりのスタイリストで予約されたことを確認しました。');
+    if (!resultText.includes('カット + 顔剃り') || !resultText.includes('¥4,800')) {
+      throw new Error('完了画面にメニュー名(カット + 顔剃り)と合計金額(¥4,800)が反映されていません。');
+    }
+    console.log('複数メニュー(カット+顔剃り)の合計金額・メニュー名が完了画面に反映されたことを確認しました。');
 
     const reservationNumberMatch = resultText.match(/B\d{9}/);
     const reservationNumber = reservationNumberMatch ? reservationNumberMatch[0] : null;
@@ -202,10 +241,23 @@ async function run() {
       );
       const { data: row, error } = await admin
         .from('reservations')
-        .select('manage_token')
+        .select('id, manage_token, price_at_booking, time_range')
         .eq('reservation_number', reservationNumber)
         .single();
       if (error || !row) throw new Error(`manage_tokenの取得に失敗: ${error?.message}`);
+
+      // 複数メニューの内訳(reservation_items)がDBに保存され、合計と一致していることを確認する
+      const { data: items, error: itemsErr } = await admin
+        .from('reservation_items')
+        .select('price_at_booking, duration_minutes')
+        .eq('reservation_id', row.id);
+      if (itemsErr) throw new Error(`reservation_itemsの取得に失敗: ${itemsErr.message}`);
+      if (items.length !== 2) throw new Error(`reservation_itemsが2件(カット・顔剃り)ではありません: ${items.length}件`);
+      const itemsTotal = items.reduce((sum, i) => sum + i.price_at_booking, 0);
+      if (itemsTotal !== 4800 || row.price_at_booking !== 4800) {
+        throw new Error(`合計金額が4,800円になっていません(items=${itemsTotal}, price_at_booking=${row.price_at_booking})`);
+      }
+      console.log('reservation_items(内訳2件・合計4,800円)がDBに保存されていることを確認しました。');
 
       await page.goto(`${BASE_URL}/manage.html?token=${row.manage_token}`);
       await page.waitForSelector('.manage-card', { timeout: 10000 });
@@ -214,6 +266,9 @@ async function run() {
       const manageText = await page.locator('.manage-card').innerText();
       if (!manageText.includes(reservationNumber)) {
         throw new Error('manage.htmlに予約番号が表示されていません。');
+      }
+      if (!manageText.includes('カット + 顔剃り')) {
+        throw new Error('manage.htmlに複数メニュー(カット + 顔剃り)が表示されていません: ' + manageText);
       }
 
       await page.click('#cancelBtn');

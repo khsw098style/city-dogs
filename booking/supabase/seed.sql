@@ -8,10 +8,8 @@
 -- リモート(本番/ステージング)へ入れる場合は `supabase db push --include-seed`
 -- または `psql "$DB_URL" -f supabase/seed.sql` を明示的に実行すること。
 --
--- 所要時間(duration_minutes)はHotPepper掲載ページに記載が無かったため、
--- 一般的なバーバー相場から仮置きした推定値。店舗オーナー確認後に要修正。
--- 料金は「カット+パーマ+眉毛整え」が ¥9,500〜10,000 の幅表示だったため、
--- スキーマ上は単一価格のみのため下限の9,500円を採用している。
+-- 所要時間(duration_minutes)はHotPepper掲載ページに記載が無かったため、一般的なバーバー相場から
+-- 仮置きした推定値。店舗オーナー確認後に要修正(メニュー部分のコメント参照)。
 -- ============================================================
 
 -- ---- スタッフ ------------------------------------------------
@@ -30,21 +28,28 @@ select 'assistant', true, 2, 'アシスタントスタッフ'
 where not exists (select 1 from staff where name = 'アシスタントスタッフ');
 
 -- ---- メニュー --------------------------------------------------
-insert into menus (name, price, duration_minutes, is_active, sort_order)
-select 'メンズカット + 眉毛整え', 4300, 40, true, 1
-where not exists (select 1 from menus where name = 'メンズカット + 眉毛整え');
-
-insert into menus (name, price, duration_minutes, is_active, sort_order)
-select 'カット + シェービング', 4600, 50, true, 2
-where not exists (select 1 from menus where name = 'カット + シェービング');
-
-insert into menus (name, price, duration_minutes, is_active, sort_order)
-select 'カット + メッシュカラー + 眉毛整え', 8500, 90, true, 3
-where not exists (select 1 from menus where name = 'カット + メッシュカラー + 眉毛整え');
-
-insert into menus (name, price, duration_minutes, is_active, sort_order)
-select 'カット + パーマ + 眉毛整え', 9500, 100, true, 4
-where not exists (select 1 from menus where name = 'カット + パーマ + 眉毛整え');
+-- 新体系(2026-09-24〜): 区分(cut/color/perm/option)ごとの単品メニュー。予約時に複数選択でき、
+-- 料金・所要時間は選択したメニューの単純合算(セット割引なし)。price_is_from=trueは「〜」付き(下限価格)。
+-- 選択ルール: cut/color/permから各最大1つ+最低1つ必須、optionは追加専用(migrations/0012参照)。
+-- 出典: booking/reference/BARBER_City_Dogs_メニュー価格一覧.xlsx(HotPepper掲載内容)。
+-- duration_minutes は店舗の回答(2026-09-25)に基づく: カット系(子供含む)・カラー・パーマ・ツイストは各60分、
+-- オプションは「10〜15分」の回答のため余裕を見て上限の15分。フェード メンテナンスカットも60分(追加回答2026-09-25)。
+-- 本番の値は管理画面「メニュー・料金」で変更できる(seedは既存メニューを上書きしない)。
+insert into menus (name, category, price, price_is_from, duration_minutes, description, is_active, sort_order)
+select v.name, v.category, v.price, v.price_is_from, v.duration_minutes, v.description, true, v.sort_order
+from (values
+  ('カット', 'cut', 4000, false, 60, 'カット+シャンプー+ショートヘッドマッサージ+ヘアセット', 10),
+  ('フェード メンテナンスカット', 'cut', 3000, false, 60, 'カットした日から14日以内', 20),
+  ('高校生カット', 'cut', 2700, false, 60, null, 30),
+  ('中学生以下カット', 'cut', 2200, true, 60, null, 40),
+  ('カラー', 'color', 4500, true, 60, '白髪染め、おしゃれ染め、メッシュ。ブリーチの場合は要連絡。', 50),
+  ('パーマ', 'perm', 5500, true, 60, null, 60),
+  ('ツイスト', 'perm', 6000, true, 60, 'ツイストパーマ', 70),
+  ('顔剃り', 'option', 800, false, 15, null, 110),
+  ('眉毛整え', 'option', 500, false, 15, '眉毛をカットし、カミソリで整えます。', 120),
+  ('ノーズWAX', 'option', 500, false, 15, '鼻毛を専用のワックスにて処理します。', 130)
+) as v(name, category, price, price_is_from, duration_minutes, description, sort_order)
+where not exists (select 1 from menus m where m.name = v.name);
 
 -- ---- 営業日(今日から60日分を自動生成) --------------------------
 -- 定休日: 毎週月曜日、第4日曜日。営業時間: 平日10:00-18:00 / 土日9:00-18:00、最終受付は共通で閉店1時間前。
@@ -101,31 +106,32 @@ update staff set
 where name = 'アシスタントスタッフ' and bio_comment is null;
 
 -- ---- LP「CONCEPT」の特徴カード(現行LPのハードコード内容をそのまま初期値にする) ----
+-- ⚠️ 管理画面で編集(タイトル変更・差し替え・削除)された後の本番DBに再実行しても重複しないよう、
+--    「タイトルや画像URLが一致する行が無ければ追加」ではなく「テーブル(区分)が空のときだけ追加」にしている。
+--    (以前はURL/タイトル一致で判定しており、管理画面でStorage画像に差し替え済みの本番に流すと
+--     静的パスの写真が別行として再追加され、SHOP & STYLEの写真が重複表示された: CHANGELOG.md参照)
 insert into site_features (sort_order, title, description)
-select 1, '再現性の高いフェード', '刈り上げのグラデーションにこだわり、伸びても綺麗な状態が続くカット技術。ビジネスシーンにも似合う爽やかな仕上がりに整えます。'
-where not exists (select 1 from site_features where title = '再現性の高いフェード');
-
-insert into site_features (sort_order, title, description)
-select 2, '眉メンテナンス付き', '全メニューに眉毛整えが付帯。カットだけでは整わない、顔全体の印象までまとめて整えます。'
-where not exists (select 1 from site_features where title = '眉メンテナンス付き');
-
-insert into site_features (sort_order, title, description)
-select 3, 'シェービング対応', 'カット+シェービングのメニューもご用意。清潔感のある肌当たりで、身だしなみの仕上げまでお任せください。'
-where not exists (select 1 from site_features where title = 'シェービング対応');
+select v.sort_order, v.title, v.description
+from (values
+  (1, '再現性の高いフェード', '刈り上げのグラデーションにこだわり、伸びても綺麗な状態が続くカット技術。ビジネスシーンにも似合う爽やかな仕上がりに整えます。'),
+  (2, '眉メンテナンス対応', 'オプションの眉毛整えを、カットなどのメニューにプラスできます。カットだけでは整わない、顔全体の印象までまとめて整えます。'),
+  (3, 'シェービング対応', 'オプションの顔剃りを、カットなどのメニューにプラスできます。清潔感のある肌当たりで、身だしなみの仕上げまでお任せください。')
+) as v(sort_order, title, description)
+where not exists (select 1 from site_features);
 
 -- ---- LP「SHOP & STYLE」の写真(現行LPのハードコード内容をそのまま初期値にする) ----
 insert into site_gallery_photos (kind, image_url, caption, sort_order)
-select 'interior', 'images/interior-chair.jpg', 'グリーンのウォールが目印の、落ち着いたセット面。', 1
-where not exists (select 1 from site_gallery_photos where image_url = 'images/interior-chair.jpg');
+select v.kind, v.image_url, v.caption, v.sort_order
+from (values
+  ('interior', 'images/interior-chair.jpg', 'グリーンのウォールが目印の、落ち着いたセット面。', 1)
+) as v(kind, image_url, caption, sort_order)
+where not exists (select 1 from site_gallery_photos where kind = 'interior');
 
 insert into site_gallery_photos (kind, image_url, caption, sort_order)
-select 'style', 'images/style-fade-highlight.jpg', 'フェード × ハイライト', 1
-where not exists (select 1 from site_gallery_photos where image_url = 'images/style-fade-highlight.jpg');
-
-insert into site_gallery_photos (kind, image_url, caption, sort_order)
-select 'style', 'images/style-perm-fade.jpg', 'フェード × パーマ', 2
-where not exists (select 1 from site_gallery_photos where image_url = 'images/style-perm-fade.jpg');
-
-insert into site_gallery_photos (kind, image_url, caption, sort_order)
-select 'style', 'images/style-slickback-beard.jpg', 'オールバック × ひげ', 3
-where not exists (select 1 from site_gallery_photos where image_url = 'images/style-slickback-beard.jpg');
+select v.kind, v.image_url, v.caption, v.sort_order
+from (values
+  ('style', 'images/style-fade-highlight.jpg', 'フェード × ハイライト', 1),
+  ('style', 'images/style-perm-fade.jpg', 'フェード × パーマ', 2),
+  ('style', 'images/style-slickback-beard.jpg', 'オールバック × ひげ', 3)
+) as v(kind, image_url, caption, sort_order)
+where not exists (select 1 from site_gallery_photos where kind = 'style');

@@ -51,7 +51,9 @@
 
 ### GET /availability
 
-**Query**: `date`(必須, `YYYY-MM-DD`), `menu_id`(必須), `staff_id`(必須)
+**Query**: `date`(必須, `YYYY-MM-DD`), `staff_id`(必須), 所要時間の指定として次のいずれか: `menu_ids`(カンマ区切りの複数メニューID。推奨) / `menu_id`(単一、旧形式・後方互換) / `duration_minutes`(1〜600、リスケジュール用。レスポンスの`menu`は`null`)。
+
+`menu_ids`の選択ルール(カット・カラーは各区分1つまで、パーマ区分(パーマ・ツイスト)は併用可・カット/カラー/パーマのいずれか1つ必須・オプションは追加のみ)に違反すると`VALIDATION_ERROR`、存在しない/非公開のメニューは`NOT_FOUND`。所要時間・料金は単純合算。
 
 「指名なし(おまかせ)」は2026-09-18に廃止した(同一時刻に複数スタッフの枠が重複表示される・お客様が意図せずアシスタント等に割り当てられる、という設計上の問題があったため)。担当スタイリストの指名は常に必須。
 
@@ -66,7 +68,7 @@
 ```json
 {
   "date": "2026-09-20",
-  "menu": { "id": "…", "name": "メンズカット + 眉毛整え", "duration_minutes": 40 },
+  "menu": { "id": "…", "name": "カット + 眉毛整え", "duration_minutes": 50, "price": 4500, "price_is_from": false },
   "slots": [
     { "start_at": "2026-09-20T10:00:00+09:00", "staff_id": "…", "staff_name": "當眞 優希" },
     { "start_at": "2026-09-20T10:15:00+09:00", "staff_id": "…", "staff_name": "當眞 優希" }
@@ -81,7 +83,7 @@
 ```json
 {
   "customer": { "name": "山田太郎", "name_kana": "ヤマダタロウ", "phone": "09012345678", "email": "taro@example.com" },
-  "menu_id": "…",
+  "menu_ids": ["…", "…"],
   "staff_id": "…",
   "start_at": "2026-09-20T10:00:00+09:00",
   "notes": ""

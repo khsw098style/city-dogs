@@ -3,6 +3,7 @@ import { ApiError, jsonResponse } from "../_shared/http.ts";
 import { computeAvailability, jstDateOf } from "../_shared/availability.ts";
 import { sendReservationConfirmationEmail } from "../_shared/reservationEmail.ts";
 import { upsertCustomerByPhone } from "../_shared/customers.ts";
+import { insertReservationItems, parseMenuIds } from "../_shared/menuSelection.ts";
 import { extractClientIp } from "../_shared/rateLimit.ts";
 import { verifyTurnstile } from "../_shared/turnstile.ts";
 import {
@@ -13,6 +14,8 @@ import {
 
 interface CreateReservationBody {
   customer?: { name?: string; name_kana?: string; phone?: string; email?: string };
+  // 選択したメニュー(主メニュー+追加メニュー)。旧形式の menu_id(単一)も受け付ける。
+  menu_ids?: string[];
   menu_id?: string;
   staff_id?: string;
   start_at?: string;
@@ -44,7 +47,10 @@ export async function createReservation(
   if (!isValidEmail(email)) {
     throw new ApiError("VALIDATION_ERROR", "メールアドレスの形式が正しくありません。");
   }
-  const menuId = requireNonEmptyString(body.menu_id, "メニュー");
+  const menuIds = parseMenuIds(body);
+  if (menuIds.length === 0) {
+    throw new ApiError("VALIDATION_ERROR", "メニューを選択してください。");
+  }
   const startAtRaw = requireNonEmptyString(body.start_at, "予約日時");
   // 「指名なし」は2026-09-18に廃止。担当スタイリストの指定を必須にする。
   const staffId = requireNonEmptyString(body.staff_id, "担当スタイリスト");
@@ -60,7 +66,7 @@ export async function createReservation(
   const date = jstDateOf(startAt);
 
   // クライアントが提示した枠をそのまま信用せず、サーバー側で同じロジックを使って再計算する。
-  const availability = await computeAvailability(client, { date, menuId, staffId });
+  const availability = await computeAvailability(client, { date, menuIds, staffId });
   if (availability.closed) {
     throw new ApiError("SLOT_UNAVAILABLE", "その日は休業日です。");
   }
@@ -83,14 +89,14 @@ export async function createReservation(
     .insert({
       customer_id: customerId,
       staff_id: matchedSlot.staff_id,
-      menu_id: menuId,
+      menu_id: availability.menu.id, // 主メニュー。全メニューの内訳は下のreservation_itemsに保存する
       time_range: `[${startAt.toISOString()},${endAt.toISOString()})`,
       status: "confirmed",
       source: "web",
-      price_at_booking: availability.menu.price,
+      price_at_booking: availability.menu.price, // 選択メニューの合計
       notes: body.notes?.trim() || null,
     })
-    .select("reservation_number, status, price_at_booking, manage_token")
+    .select("id, reservation_number, status, price_at_booking, manage_token")
     .single();
 
   if (insertErr) {
@@ -102,6 +108,8 @@ export async function createReservation(
     throw new ApiError("INTERNAL_ERROR", "予約の登録に失敗しました。");
   }
 
+  await insertReservationItems(client, reservation.id, availability.selection);
+
   // メール送信は失敗しても予約自体は成立させる(sendEmail内部で例外を握りつぶす設計)。
   // awaitはするが、失敗してもここでは何もしない。
   await sendReservationConfirmationEmail(email, {
@@ -112,6 +120,7 @@ export async function createReservation(
     startAt,
     endAt,
     price: reservation.price_at_booking,
+    priceIsFrom: availability.menu.price_is_from,
   });
 
   return jsonResponse(
@@ -121,8 +130,10 @@ export async function createReservation(
       start_at: startAt.toISOString(),
       end_at: endAt.toISOString(),
       staff_name: matchedSlot.staff_name,
-      menu_id: menuId,
+      menu_id: availability.menu.id,
+      menu_name: availability.menu.name,
       price: reservation.price_at_booking,
+      price_is_from: availability.menu.price_is_from,
     },
     { status: 201, headers },
   );

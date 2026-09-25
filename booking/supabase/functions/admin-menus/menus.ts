@@ -5,13 +5,25 @@ import { isValidUuid, requireNonEmptyString } from "../_shared/validation.ts";
 interface MenuBody {
   name?: string;
   price?: number;
+  price_is_from?: boolean;
   duration_minutes?: number;
   description?: string | null;
+  category?: string;
   sort_order?: number;
   is_active?: boolean;
 }
 
-const SELECT_COLUMNS = "id, name, price, duration_minutes, description, is_active, sort_order";
+const SELECT_COLUMNS = "id, name, price, price_is_from, duration_minutes, description, category, is_active, sort_order";
+
+// migrations/0012 のCHECK制約と一致させる。cut/color/perm=単独で予約可能な主メニュー、option=追加専用。
+const VALID_CATEGORIES = ["cut", "color", "perm", "option"];
+
+function requireValidCategory(value: unknown): string {
+  if (typeof value !== "string" || !VALID_CATEGORIES.includes(value)) {
+    throw new ApiError("VALIDATION_ERROR", "区分は cut / color / perm / option のいずれかを指定してください。");
+  }
+  return value;
+}
 
 function requirePositiveInt(value: unknown, fieldName: string): number {
   const n = Number(value);
@@ -39,10 +51,20 @@ export async function createMenu(req: Request, client: SupabaseClient, headers: 
   const durationMinutes = requirePositiveInt(body.duration_minutes, "所要時間");
   const description = body.description?.trim() || null;
   const sortOrder = Number.isFinite(body.sort_order) ? Number(body.sort_order) : 0;
+  const category = body.category !== undefined ? requireValidCategory(body.category) : "cut";
+  const priceIsFrom = Boolean(body.price_is_from);
 
   const { data, error } = await client
     .from("menus")
-    .insert({ name, price, duration_minutes: durationMinutes, description, sort_order: sortOrder })
+    .insert({
+      name,
+      price,
+      price_is_from: priceIsFrom,
+      duration_minutes: durationMinutes,
+      description,
+      category,
+      sort_order: sortOrder,
+    })
     .select(SELECT_COLUMNS)
     .single();
   if (error) throw new ApiError("INTERNAL_ERROR", "メニューの作成に失敗しました。");
@@ -59,7 +81,7 @@ export async function deleteMenu(id: string, client: SupabaseClient, headers: He
   if (error) {
     // 23503 = foreign_key_violation。reservations.menu_idから参照されている(=予約実績がある)。
     if (error.code === "23503") {
-      throw new ApiError("VALIDATION_ERROR", "このメニューは予約実績があるため削除できません。「LPに公開する」のチェックを外してください。");
+      throw new ApiError("VALIDATION_ERROR", "このメニューは予約実績があるため削除できません。「公開する」のチェックを外してください。");
     }
     throw new ApiError("INTERNAL_ERROR", "メニューの削除に失敗しました。");
   }
@@ -75,6 +97,8 @@ export async function updateMenu(id: string, req: Request, client: SupabaseClien
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (body.name !== undefined) patch.name = requireNonEmptyString(body.name, "メニュー名");
   if (body.price !== undefined) patch.price = requirePositiveInt(body.price, "価格");
+  if (body.price_is_from !== undefined) patch.price_is_from = Boolean(body.price_is_from);
+  if (body.category !== undefined) patch.category = requireValidCategory(body.category);
   if (body.duration_minutes !== undefined) patch.duration_minutes = requirePositiveInt(body.duration_minutes, "所要時間");
   if (body.description !== undefined) patch.description = body.description?.trim() || null;
   if (body.sort_order !== undefined) patch.sort_order = Number(body.sort_order) || 0;

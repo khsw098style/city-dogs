@@ -108,9 +108,15 @@ async function run() {
     }
 
     const menuCount = await page.locator('#menuList .menu-item').count();
-    if (menuCount !== 4) failures.push(`MENU & PRICE: 期待したメニュー数(4)と異なる: ${menuCount}`);
+    if (menuCount !== 10) failures.push(`MENU & PRICE: 期待したメニュー数(10)と異なる: ${menuCount}`);
+    const groupTitles = await page.locator('#menuList .menu-group-title').allTextContents();
+    if (groupTitles.join(',') !== 'カット,カラー,パーマ,オプション') failures.push(`MENU & PRICE: 区分の見出しが想定と異なる: ${groupTitles.join(',')}`);
     const firstMenuPrice = await page.locator('#menuList .menu-item-price').first().textContent();
-    if (!firstMenuPrice.includes('4,300')) failures.push(`MENU & PRICE: 先頭メニューの価格が想定と異なる: ${firstMenuPrice}`);
+    if (!firstMenuPrice.includes('4,000')) failures.push(`MENU & PRICE: 先頭メニューの価格が想定と異なる: ${firstMenuPrice}`);
+
+    // 「〜」付き(下限価格)のメニューは価格の後ろに「〜」が表示される(カラー ¥4,500〜)
+    const colorPrice = await page.locator('#menuList .menu-item', { hasText: 'カラー' }).first().locator('.menu-item-price').textContent();
+    if (!colorPrice.includes('4,500') || !colorPrice.includes('〜')) failures.push(`MENU & PRICE: カラーの価格が「¥4,500〜」になっていない: ${colorPrice}`);
 
     const staffCount = await page.locator('#staffGrid .staff-card').count();
     if (staffCount !== 2) failures.push(`STAFF: 期待したスタッフ数(2)と異なる: ${staffCount}`);

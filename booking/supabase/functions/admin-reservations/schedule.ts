@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ApiError, jsonResponse } from "../_shared/http.ts";
 import { parseTstzRange } from "../_shared/range.ts";
+import { loadReservationMenuLabels } from "../_shared/menuSelection.ts";
 
 const JST_OFFSET = "+09:00";
 
@@ -64,6 +65,7 @@ export async function getSchedule(url: URL, client: SupabaseClient, headers: Hea
 
   const customerById = new Map((customers ?? []).map((c) => [c.id as string, c]));
   const menuNameById = new Map((menus ?? []).map((m) => [m.id as string, m.name as string]));
+  const menuLabels = await loadReservationMenuLabels(client, (reservations ?? []).map((r) => r.id as string));
 
   const reservationsByStaff = new Map<string, unknown[]>();
   for (const r of reservations ?? []) {
@@ -82,7 +84,9 @@ export async function getSchedule(url: URL, client: SupabaseClient, headers: Hea
       price: r.price_at_booking,
       menu_id: r.menu_id,
       notes: r.notes,
-      menu_name: menuNameById.get(r.menu_id as string) ?? null,
+      // 複数メニュー選択の予約は連結名(「カット + パーマ」)。内訳のない古い予約は主メニュー名にフォールバック。
+      menu_name: menuLabels.get(r.id as string)?.name ?? menuNameById.get(r.menu_id as string) ?? null,
+      price_is_from: menuLabels.get(r.id as string)?.priceIsFrom ?? false,
       customer: customer
         ? { id: customer.id, name: customer.name, phone: customer.phone, no_show_count: customer.no_show_count, is_blocked: customer.is_blocked }
         : null,

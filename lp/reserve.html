@@ -75,9 +75,11 @@
     <!-- STEP 1: メニュー -->
     <section class="wizard-step is-active" data-step="1" id="stepMenu">
       <h2 class="wizard-step-title">メニューを選ぶ</h2>
+      <p class="wizard-lead">カット・カラー・パーマからお選びください(組み合わせもOKです)。選んだあとに、顔剃り・眉毛整えなどのオプションも追加できます。料金と所要時間は、選んだメニューの合計で表示します。</p>
       <div id="menuList" class="option-list" aria-live="polite">
         <p class="wizard-status">メニューを読み込んでいます…</p>
       </div>
+      <div id="selectionSummary" class="selection-summary" aria-live="polite" hidden></div>
       <div class="wizard-actions">
         <span></span>
         <button type="button" class="btn btn-primary" id="toStep2" disabled>次へ(日時を選ぶ)</button>

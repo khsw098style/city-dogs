@@ -3,10 +3,13 @@ import { ApiError, jsonResponse } from "../_shared/http.ts";
 import { computeAvailability, jstDateOf } from "../_shared/availability.ts";
 import { sendReservationConfirmationEmail } from "../_shared/reservationEmail.ts";
 import { upsertCustomerByPhone } from "../_shared/customers.ts";
+import { insertReservationItems, parseMenuIds } from "../_shared/menuSelection.ts";
 import { isValidEmail, isValidJpMobilePhone, requireNonEmptyString } from "../_shared/validation.ts";
 
 interface CreateAdminReservationBody {
   customer?: { name?: string; name_kana?: string; phone?: string; email?: string };
+  // 選択したメニュー(主メニュー+追加メニュー)。旧形式の menu_id(単一)も受け付ける。
+  menu_ids?: string[];
   menu_id?: string;
   staff_id?: string;
   start_at?: string;
@@ -38,7 +41,10 @@ export async function createAdminReservation(
   }
   const email = emailRaw || null;
 
-  const menuId = requireNonEmptyString(body.menu_id, "メニュー");
+  const menuIds = parseMenuIds(body);
+  if (menuIds.length === 0) {
+    throw new ApiError("VALIDATION_ERROR", "メニューを選択してください。");
+  }
   const startAtRaw = requireNonEmptyString(body.start_at, "予約日時");
   // 「指名なし」は2026-09-18に廃止。担当スタイリストの指定を必須にする。
   const staffId = requireNonEmptyString(body.staff_id, "担当スタイリスト");
@@ -53,7 +59,7 @@ export async function createAdminReservation(
 
   const date = jstDateOf(startAt);
 
-  const availability = await computeAvailability(client, { date, menuId, staffId });
+  const availability = await computeAvailability(client, { date, menuIds, staffId });
   if (availability.closed) {
     throw new ApiError("SLOT_UNAVAILABLE", "その日は休業日です。");
   }
@@ -78,11 +84,11 @@ export async function createAdminReservation(
     .insert({
       customer_id: customerId,
       staff_id: matchedSlot.staff_id,
-      menu_id: menuId,
+      menu_id: availability.menu.id, // 主メニュー。全メニューの内訳は下のreservation_itemsに保存する
       time_range: `[${startAt.toISOString()},${endAt.toISOString()})`,
       status: "confirmed",
       source: "phone",
-      price_at_booking: availability.menu.price,
+      price_at_booking: availability.menu.price, // 選択メニューの合計
       notes: body.notes?.trim() || null,
     })
     .select("id, reservation_number, status, price_at_booking, manage_token")
@@ -97,6 +103,8 @@ export async function createAdminReservation(
     throw new ApiError("INTERNAL_ERROR", "予約の登録に失敗しました。");
   }
 
+  await insertReservationItems(client, reservation.id, availability.selection);
+
   if (email) {
     await sendReservationConfirmationEmail(email, {
       reservationNumber: reservation.reservation_number,
@@ -106,6 +114,7 @@ export async function createAdminReservation(
       startAt,
       endAt,
       price: reservation.price_at_booking,
+      priceIsFrom: availability.menu.price_is_from,
     });
   }
 
@@ -118,9 +127,10 @@ export async function createAdminReservation(
       end_at: endAt.toISOString(),
       staff_id: matchedSlot.staff_id,
       staff_name: matchedSlot.staff_name,
-      menu_id: menuId,
+      menu_id: availability.menu.id,
       menu_name: availability.menu.name,
       price: reservation.price_at_booking,
+      price_is_from: availability.menu.price_is_from,
     },
     { status: 201, headers },
   );

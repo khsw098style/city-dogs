@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ApiError } from "./http.ts";
 import { parseTstzRange } from "./range.ts";
+import { loadMenuSelection, type MenuSelection } from "./menuSelection.ts";
 
 // GET /availability と POST /reservations(サーバー側の再検証)の両方から呼ばれる、
 // 空き枠計算の唯一の実装。api-design.mdの「GET /availability」節のロジックに対応する。
@@ -21,7 +22,10 @@ export interface Slot {
 }
 
 export interface AvailabilityResult {
-  menu: { id: string; name: string; duration_minutes: number; price: number };
+  // 選択されたメニュー全体の合計(id=主メニュー、name=「カット + パーマ」のような連結名)。
+  menu: { id: string; name: string; duration_minutes: number; price: number; price_is_from: boolean };
+  // 予約作成側(reservation_itemsへの保存)が内訳を参照するために保持する。APIレスポンスには含めない。
+  selection: MenuSelection;
   closed: boolean;
   slots: Slot[];
 }
@@ -120,9 +124,8 @@ export function generateSlots(params: GenerateSlotsParams): { closed: boolean; s
   return { closed: false, slots };
 }
 
-interface ComputeAvailabilityParams {
+interface ComputeSlotsParams {
   date: string; // YYYY-MM-DD (JST)
-  menuId: string;
   // 「指名なし」は2026-09-18に廃止(同一時刻に複数スタッフの枠が重複して見える・お客様が
   // 意図せずアシスタント等に割り当てられる、という設計上の問題があったため)。必ず1名指定する。
   staffId: string;
@@ -133,20 +136,28 @@ interface ComputeAvailabilityParams {
   excludeReservationId?: string;
 }
 
-// I/O(Supabase呼び出し)を担う薄いラッパー。実際のロジックはgenerateSlots()に委譲する。
-export async function computeAvailability(
+interface ComputeAvailabilityParams extends ComputeSlotsParams {
+  // 選択されたメニューID(主メニュー+追加メニュー)。所要時間は選択の合計で計算する。
+  menuIds: string[];
+}
+
+interface ComputeSlotsForDurationParams extends ComputeSlotsParams {
+  durationMinutes: number;
+}
+
+// 所要時間(分)を直接指定して空き枠だけを求める。メニューの存在・公開状態を確認しないため、
+// 既に確定済みの予約のリスケジュール(admin-reservations/update.ts)や、予約時点のメニューが
+// その後非公開になった予約の日時変更でも動く。
+export async function computeSlotsForDuration(
   client: SupabaseClient,
-  params: ComputeAvailabilityParams,
-): Promise<AvailabilityResult> {
-  const { date, menuId, staffId, excludeReservationId } = params;
+  params: ComputeSlotsForDurationParams,
+): Promise<{ closed: boolean; slots: Slot[] }> {
+  const { date, staffId, durationMinutes, excludeReservationId } = params;
   const now = params.now ?? new Date();
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     throw new ApiError("VALIDATION_ERROR", "date は YYYY-MM-DD 形式で指定してください。");
   }
-
-  const menu = await fetchMenu(client, menuId);
-  const menuInfo = { id: menu.id, name: menu.name, duration_minutes: menu.duration_minutes, price: menu.price };
 
   const businessDay = await fetchBusinessDay(client, date);
 
@@ -159,32 +170,46 @@ export async function computeAvailability(
   const shiftByStaff = await fetchShiftsByStaff(client, date, staffIds);
   const bookedByStaff = await fetchBookedRangesByStaff(client, date, staffIds, excludeReservationId);
 
-  const { closed, slots } = generateSlots({
+  return generateSlots({
     date,
-    durationMinutes: menu.duration_minutes,
+    durationMinutes,
     businessDay,
     staffList,
     shiftByStaff,
     bookedByStaff,
     now,
   });
+}
 
-  return { menu: menuInfo, closed, slots };
+// I/O(Supabase呼び出し)を担う薄いラッパー。メニュー選択の検証・合計計算(menuSelection.ts)を
+// 行った上で、実際の空き枠計算はcomputeSlotsForDuration→generateSlots()に委譲する。
+export async function computeAvailability(
+  client: SupabaseClient,
+  params: ComputeAvailabilityParams,
+): Promise<AvailabilityResult> {
+  const { menuIds, ...rest } = params;
+  const selection = await loadMenuSelection(client, menuIds);
+
+  const { closed, slots } = await computeSlotsForDuration(client, {
+    ...rest,
+    durationMinutes: selection.totalDurationMinutes,
+  });
+
+  return {
+    menu: {
+      id: selection.primary.id,
+      name: selection.name,
+      duration_minutes: selection.totalDurationMinutes,
+      price: selection.totalPrice,
+      price_is_from: selection.priceIsFrom,
+    },
+    selection,
+    closed,
+    slots,
+  };
 }
 
 // ---- internal helpers(I/O) -------------------------------------------
-
-async function fetchMenu(client: SupabaseClient, menuId: string) {
-  const { data, error } = await client
-    .from("menus")
-    .select("id, name, duration_minutes, price, is_active")
-    .eq("id", menuId)
-    .maybeSingle();
-
-  if (error) throw new ApiError("INTERNAL_ERROR", "メニュー情報の取得に失敗しました。");
-  if (!data || !data.is_active) throw new ApiError("NOT_FOUND", "指定されたメニューが見つかりません。");
-  return data;
-}
 
 async function fetchBusinessDay(client: SupabaseClient, date: string): Promise<BusinessDayInfo | null> {
   const { data, error } = await client

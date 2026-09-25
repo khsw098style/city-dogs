@@ -7,6 +7,10 @@
 
   const yenFmt = new Intl.NumberFormat('ja-JP');
 
+  // メニューの区分(menus.category)。表示順と見出し。予約画面(reserve.js)と同じ定義。
+  const MENU_CATEGORY_ORDER = ['cut', 'color', 'perm', 'option'];
+  const MENU_CATEGORY_LABELS = { cut: 'カット', color: 'カラー', perm: 'パーマ', option: 'オプション' };
+
   const AVATAR_PLACEHOLDER_SVG =
     '<svg viewBox="0 0 24 24" width="40" height="40"><path fill="currentColor" d="M12 12c2.7 0 8 1.3 8 4v2H4v-2c0-2.7 5.3-4 8-4zm0-2a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"/></svg>';
 
@@ -113,16 +117,24 @@
       el.menuList.innerHTML = '<li class="menu-note">現在メニュー情報を準備中です。</li>';
       return;
     }
-    el.menuList.innerHTML = menus
-      .map((m) => `
-        <li class="menu-item reveal">
-          <div class="menu-item-main">
-            <h3>${escapeHtml(m.name)}</h3>
-            <p>${escapeHtml(m.description ?? '')}</p>
-          </div>
-          <div class="menu-item-price"><span class="yen">¥</span>${yenFmt.format(m.price)}</div>
-        </li>
-      `)
+    // 区分(カット/カラー/パーマ/オプション)ごとに見出しを付けて並べる。区分順は予約画面と同じ。
+    el.menuList.innerHTML = MENU_CATEGORY_ORDER
+      .map((category) => {
+        const items = menus.filter((m) => (m.category ?? 'cut') === category);
+        if (items.length === 0) return '';
+        const rows = items
+          .map((m) => `
+            <li class="menu-item reveal">
+              <div class="menu-item-main">
+                <h3>${escapeHtml(m.name)}</h3>
+                ${m.description ? `<p>${escapeHtml(m.description)}</p>` : ''}
+              </div>
+              <div class="menu-item-price"><span class="yen">¥</span>${yenFmt.format(m.price)}${m.price_is_from ? '<span class="price-to">〜</span>' : ''}</div>
+            </li>
+          `)
+          .join('');
+        return `<li class="menu-group-title reveal">${MENU_CATEGORY_LABELS[category]}</li>${rows}`;
+      })
       .join('');
   }
 

@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
     const client = serviceClient();
     const { data, error } = await client
       .from("menus")
-      .select("id, name, price, duration_minutes, description")
+      .select("id, name, price, price_is_from, duration_minutes, description, category")
       .eq("is_active", true)
       .order("sort_order", { ascending: true });
 

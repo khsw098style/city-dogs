@@ -19,7 +19,9 @@ export async function getReservationByToken(
   const { data, error } = await client
     .from("reservations")
     .select(
-      "reservation_number, status, time_range, price_at_booking, notes, menus(name), staff(name)",
+      // reservation_items: 複数メニュー選択の内訳(manage.js側でsort_order順に「カット + パーマ」と連結表示する)。
+      // 内訳のない古い予約向けに menus(name)(主メニュー)も残している。
+      "reservation_number, status, time_range, price_at_booking, notes, menus(name), staff(name), reservation_items(sort_order, price_is_from, menus(name))",
     )
     .eq("manage_token", token)
     .maybeSingle();

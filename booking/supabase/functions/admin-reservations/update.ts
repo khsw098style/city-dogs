@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ApiError, jsonResponse } from "../_shared/http.ts";
-import { computeAvailability, jstDateOf } from "../_shared/availability.ts";
+import { computeSlotsForDuration, jstDateOf } from "../_shared/availability.ts";
 import { parseTstzRange } from "../_shared/range.ts";
 import { isValidUuid, requireNonEmptyString } from "../_shared/validation.ts";
 
@@ -28,8 +28,8 @@ const REASON_REQUIRED_STATUSES = new Set(["declined", "cancelled_by_salon", "no_
 
 // PATCH /admin-reservations/:id
 // ステータス変更、および/またはスタッフ・時間の変更(リスケジュール)を同エンドポイントで扱う。
-// リスケジュール時は、新しい枠の空き確認をPOST /admin-reservations作成時と同じ
-// computeAvailability()に通す(クライアント入力を信用せずサーバー側で再検証する方針を踏襲)。
+// リスケジュール時は、新しい枠の空き確認をPOST /admin-reservations作成時と同じ空き枠計算
+// (computeSlotsForDuration→generateSlots)に通す(クライアント入力を信用せずサーバー側で再検証する方針を踏襲)。
 export async function updateReservation(
   id: string,
   req: Request,
@@ -69,9 +69,11 @@ export async function updateReservation(
 
     // 変更対象の予約自身を「既存予約との重なり」判定から除外しないと、変更前の時間帯が
     // 自分自身とぶつかって誤ってSLOT_UNAVAILABLEになる(同じ時間のままスタッフだけ変える場合など)。
-    const availability = await computeAvailability(client, {
+    // 所要時間は予約時点の合計(現在のtime_rangeの長さ)をそのまま使う。メニュー(複数選択の
+    // 内訳)を引き直さないので、予約後にメニューが非公開・改定されていても日時変更できる。
+    const availability = await computeSlotsForDuration(client, {
       date: jstDateOf(newStartAt),
-      menuId: current.menu_id as string,
+      durationMinutes: durationMs / 60000,
       staffId: newStaffId,
       excludeReservationId: id,
     });

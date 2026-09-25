@@ -116,6 +116,9 @@
     createReservationStatus: document.getElementById('createReservationStatus'),
     crPhone: document.getElementById('crPhone'),
     crMenu: document.getElementById('crMenu'),
+    crExtrasField: document.getElementById('crExtrasField'),
+    crExtras: document.getElementById('crExtras'),
+    crMenuSummary: document.getElementById('crMenuSummary'),
     crStaff: document.getElementById('crStaff'),
     crDate: document.getElementById('crDate'),
     crSlot: document.getElementById('crSlot'),
@@ -518,6 +521,8 @@
           method: 'POST',
           body: {
             name: document.getElementById('menuAddName').value.trim(),
+            category: document.getElementById('menuAddCategory').value,
+            price_is_from: document.getElementById('menuAddPriceFrom').checked,
             price: Number(document.getElementById('menuAddPrice').value),
             duration_minutes: Number(document.getElementById('menuAddDuration').value),
             description: document.getElementById('menuAddDescription').value.trim(),
@@ -574,7 +579,8 @@
         el.crPhone.setSelectionRange(len, len);
       }
     });
-    el.crMenu.addEventListener('change', refreshCreateSlots);
+    el.crMenu.addEventListener('change', onCreateMenuChange);
+    el.crExtras.addEventListener('change', onCreateExtrasChange);
     el.crStaff.addEventListener('change', refreshCreateSlots);
     el.crDate.addEventListener('change', refreshCreateSlots);
 
@@ -609,6 +615,77 @@
     return menuOptionsCache;
   }
 
+  // メニューの区分(menus.category)。選択ルールはサーバー側 _shared/menuSelection.ts が最終防御:
+  // cut/colorは各区分から最大1つ、permはパーマ・ツイストを併用可(複数)、この3区分のどれか1つは必須、optionは追加専用で何個でも可。
+  const MAIN_MENU_CATEGORIES = ['cut', 'color', 'perm'];
+  const SINGLE_SELECT_MENU_CATEGORIES = ['cut', 'color'];
+  const MENU_CATEGORY_ORDER = ['cut', 'color', 'perm', 'option'];
+  const MENU_CATEGORY_LABELS = { cut: 'カット', color: 'カラー', perm: 'パーマ', option: 'オプション' };
+
+  function formatMenuPrice(price, isFrom) {
+    return `¥${yenFmt.format(price)}${isFrom ? '〜' : ''}`;
+  }
+
+  // 電話予約登録モーダルで選択中のメニューID(主メニュー+チェックした追加メニュー)。
+  function getCreateMenuIds() {
+    const mainId = el.crMenu.value;
+    if (!mainId) return [];
+    const extras = [...el.crExtras.querySelectorAll('input[type="checkbox"]:checked')].map((c) => c.value);
+    return [mainId, ...extras];
+  }
+
+  // 主メニューを選ぶと、追加できるメニュー(同じ区分以外)をチェックボックスで表示する。
+  function renderCreateExtras() {
+    const mainId = el.crMenu.value;
+    const menus = menuOptionsCache ?? [];
+    const main = menus.find((m) => m.id === mainId);
+    if (!main) {
+      el.crExtras.innerHTML = '';
+      el.crExtrasField.hidden = true;
+      return;
+    }
+    const mainCategory = main.category ?? 'cut';
+    const extras = menus
+      .filter((m) => m.id !== mainId && !(SINGLE_SELECT_MENU_CATEGORIES.includes(mainCategory) && (m.category ?? 'cut') === mainCategory))
+      .sort((a, b) => MENU_CATEGORY_ORDER.indexOf(a.category ?? 'cut') - MENU_CATEGORY_ORDER.indexOf(b.category ?? 'cut'));
+    el.crExtras.innerHTML = extras.map((m) => `
+      <label><input type="checkbox" value="${m.id}" data-category="${m.category ?? 'cut'}"> ${escapeHtml(m.name)}(${formatMenuPrice(m.price, m.price_is_from)}・${m.duration_minutes}分)</label>
+    `).join('');
+    el.crExtrasField.hidden = extras.length === 0;
+  }
+
+  function updateCreateMenuSummary() {
+    const ids = getCreateMenuIds();
+    if (ids.length === 0) {
+      el.crMenuSummary.hidden = true;
+      return;
+    }
+    const selected = (menuOptionsCache ?? []).filter((m) => ids.includes(m.id));
+    const price = selected.reduce((sum, m) => sum + m.price, 0);
+    const minutes = selected.reduce((sum, m) => sum + m.duration_minutes, 0);
+    const isFrom = selected.some((m) => m.price_is_from);
+    el.crMenuSummary.hidden = false;
+    el.crMenuSummary.textContent = `合計 ${formatMenuPrice(price, isFrom)} ・ 所要 約${minutes}分`;
+  }
+
+  function onCreateMenuChange() {
+    renderCreateExtras();
+    updateCreateMenuSummary();
+    refreshCreateSlots();
+  }
+
+  function onCreateExtrasChange(e) {
+    // カット・カラーは同じ区分から1つまで。選び直したら同区分の他のチェックを外す(パーマ・ツイストは併用可)。
+    const changed = e.target;
+    if (changed.checked && SINGLE_SELECT_MENU_CATEGORIES.includes(changed.dataset.category)) {
+      el.crExtras.querySelectorAll(`input[data-category="${changed.dataset.category}"]`).forEach((c) => {
+        if (c !== changed) c.checked = false;
+      });
+    }
+    updateCreateMenuSummary();
+    refreshCreateSlots();
+  }
+
   async function loadStaffOptions() {
     if (!staffOptionsCache) {
       const data = await apiFetch('staff', '');
@@ -622,8 +699,12 @@
   // 送信したときに「その時刻の枠自体が存在しない」だけなのに「空きがない」と同じ
   // エラーになり紛らわしい不具合があったため、予約画面(reserve.js)と同様に
   // 必ず実際の枠一覧から選ばせる方式にしている。
-  async function fetchAvailabilitySlots(menuId, staffId, date, excludeReservationId) {
-    const params = new URLSearchParams({ date, menu_id: menuId });
+  // menuSpec: { menuIds: [...] }(選んだメニュー。所要時間は合計で計算される) か
+  // { durationMinutes }(既存予約のリスケジュール用。予約時点のメニューが後から非公開になっていても動く)。
+  async function fetchAvailabilitySlots(menuSpec, staffId, date, excludeReservationId) {
+    const params = new URLSearchParams({ date });
+    if (menuSpec.durationMinutes) params.set('duration_minutes', String(menuSpec.durationMinutes));
+    else params.set('menu_ids', menuSpec.menuIds.join(','));
     if (staffId) params.set('staff_id', staffId);
     if (excludeReservationId) params.set('exclude_reservation_id', excludeReservationId);
     return apiFetch('availability', `?${params.toString()}`);
@@ -656,10 +737,10 @@
   let createSlotsRequestId = 0;
 
   async function refreshCreateSlots() {
-    const menuId = el.crMenu.value;
+    const menuIds = getCreateMenuIds();
     const date = el.crDate.value;
     const staffId = el.crStaff.value;
-    if (!menuId || !date) {
+    if (menuIds.length === 0 || !date) {
       el.crSlot.innerHTML = '<option value="">メニュー・日付を選択すると表示されます</option>';
       return;
     }
@@ -670,7 +751,7 @@
     const requestId = ++createSlotsRequestId;
     el.crSlot.innerHTML = '<option value="">読み込み中…</option>';
     try {
-      const data = await fetchAvailabilitySlots(menuId, staffId, date);
+      const data = await fetchAvailabilitySlots({ menuIds }, staffId, date);
       if (requestId !== createSlotsRequestId) return; // 自分より新しいリクエストが既に走っているので破棄
       renderSlotOptions(el.crSlot, data);
     } catch (err) {
@@ -685,13 +766,22 @@
     hideFormError(el.createReservationError);
     el.crDate.value = el.scheduleDate.value || formatDateLocal(new Date());
     el.crMenu.innerHTML = '<option value="">読み込み中…</option>';
+    el.crExtras.innerHTML = '';
+    el.crExtrasField.hidden = true;
+    el.crMenuSummary.hidden = true;
     el.crSlot.innerHTML = '<option value="">メニュー・日付を選択すると表示されます</option>';
     openModal(el.createReservationModal);
 
     try {
       const [menus, staff] = await Promise.all([loadMenuOptions(), loadStaffOptions()]);
-      el.crMenu.innerHTML = '<option value="">選択してください</option>' + menus
-        .map((m) => `<option value="${m.id}">${escapeHtml(m.name)}(¥${yenFmt.format(m.price)})</option>`)
+      el.crMenu.innerHTML = '<option value="">選択してください</option>' + MAIN_MENU_CATEGORIES
+        .map((category) => {
+          const options = menus
+            .filter((m) => (m.category ?? 'cut') === category)
+            .map((m) => `<option value="${m.id}">${escapeHtml(m.name)}(${formatMenuPrice(m.price, m.price_is_from)})</option>`)
+            .join('');
+          return options ? `<optgroup label="${MENU_CATEGORY_LABELS[category]}">${options}</optgroup>` : '';
+        })
         .join('');
       el.crStaff.innerHTML = '<option value="" disabled selected>選択してください</option>' +
         staff.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
@@ -730,7 +820,7 @@
             phone,
             email: document.getElementById('crEmail').value.trim() || null,
           },
-          menu_id: el.crMenu.value,
+          menu_ids: getCreateMenuIds(),
           staff_id: el.crStaff.value,
           start_at: el.crSlot.value,
           notes: document.getElementById('crNotes').value.trim(),
@@ -824,7 +914,12 @@
       // 「今使っている枠」を自前で選択肢に補完する必要はない(休憩・営業時間の変更も
       // そのまま反映される。以前はここを手動で補完していたため、後から休憩を設定しても
       // 現在の枠が選択肢に残り続けてしまう不具合があった)。
-      const data = await fetchAvailabilitySlots(editingReservation.menu_id, staffId, date, editingReservation.id);
+      // 所要時間は予約時点の合計(現在の開始〜終了の長さ)をそのまま使う。複数メニューの内訳を引き直さず、
+      // 予約後にメニューが非公開・改定されていても日時変更できる。
+      const durationMinutes = Math.round(
+        (new Date(editingReservation.end_at).getTime() - new Date(editingReservation.start_at).getTime()) / 60000,
+      );
+      const data = await fetchAvailabilitySlots({ durationMinutes }, staffId, date, editingReservation.id);
       if (requestId !== editSlotsRequestId) return; // 自分より新しいリクエストが既に走っているので破棄
       renderSlotOptions(el.editSlotSelect, data);
       const isSameContext = date === formatDateLocal(new Date(editingReservation.start_at))
@@ -1160,7 +1255,7 @@
   }
 
   // メニューの削除は提供しない(reservations.menu_idが参照しているため物理削除は不可能。
-  // staff/site_featuresと同じ考え方。掲載終了は「LPに公開する」チェックを外す運用にする)。
+  // staff/site_featuresと同じ考え方。掲載終了は「公開する」チェックを外す運用にする)。
   function renderMenuCards(menus) {
     if (!menus || menus.length === 0) {
       el.menuCards.innerHTML = '<p class="status-text">メニューが登録されていません。</p>';
@@ -1169,11 +1264,21 @@
     el.menuCards.innerHTML = menus.map((m) => `
       <div class="content-card" data-id="${m.id}">
         <div class="field"><label>メニュー名</label><input type="text" class="f-name" value="${escapeHtml(m.name)}"></div>
+        <div class="field">
+          <label>区分</label>
+          <select class="f-category">
+            <option value="cut" ${m.category === 'cut' ? 'selected' : ''}>カット(1予約で1つまで)</option>
+            <option value="color" ${m.category === 'color' ? 'selected' : ''}>カラー(1予約で1つまで)</option>
+            <option value="perm" ${m.category === 'perm' ? 'selected' : ''}>パーマ(併用可)</option>
+            <option value="option" ${m.category === 'option' ? 'selected' : ''}>オプション(追加専用)</option>
+          </select>
+        </div>
         <div class="field"><label>価格(円・税込)</label><input type="text" inputmode="numeric" class="f-price" value="${m.price}"></div>
+        <div class="field"><label><input type="checkbox" class="f-price-from" ${m.price_is_from ? 'checked' : ''}> 「〜」付き(下限価格)</label></div>
         <div class="field"><label>所要時間(分)</label><input type="text" inputmode="numeric" class="f-duration" value="${m.duration_minutes}"></div>
         <div class="field"><label>説明文</label><input type="text" class="f-description" value="${escapeHtml(m.description ?? '')}"></div>
         <div class="field"><label>表示順</label><input type="text" inputmode="numeric" class="f-sort" value="${m.sort_order}"></div>
-        <div class="field"><label><input type="checkbox" class="f-active" ${m.is_active ? 'checked' : ''}> LPに公開する</label></div>
+        <div class="field"><label><input type="checkbox" class="f-active" ${m.is_active ? 'checked' : ''}> 公開する(LP・予約画面に表示)</label></div>
         <div class="content-card-actions">
           <button type="button" class="btn btn-primary btn-small save-btn">保存</button>
           <button type="button" class="btn btn-ghost btn-small delete-btn">削除</button>
@@ -1192,7 +1297,9 @@
             method: 'PATCH',
             body: {
               name: card.querySelector('.f-name').value.trim(),
+              category: card.querySelector('.f-category').value,
               price: Number(card.querySelector('.f-price').value),
+              price_is_from: card.querySelector('.f-price-from').checked,
               duration_minutes: Number(card.querySelector('.f-duration').value),
               description: card.querySelector('.f-description').value.trim(),
               sort_order: Number(card.querySelector('.f-sort').value) || 0,
@@ -1436,7 +1543,7 @@
         ${escapeHtml(r.customer?.name ?? '(顧客不明)')}
         ${r.customer?.is_blocked ? '<span class="no-show-flag">要注意</span>' : ''}
       </div>
-      <div class="reservation-card-menu">${escapeHtml(r.menu_name ?? '')} ・ ¥${yenFmt.format(r.price)}</div>
+      <div class="reservation-card-menu">${escapeHtml(r.menu_name ?? '')} ・ ${formatMenuPrice(r.price, r.price_is_from)}</div>
       <div class="reservation-card-footer">
         <span class="status-pill ${meta.pill}">${meta.label}</span>
         <span class="source-tag">${SOURCE_LABEL[r.source] ?? r.source}</span>
@@ -1984,7 +2091,7 @@
           <td>${jstDateFmt.format(start)} ${jstTimeFmt.format(start)}</td>
           <td><span class="status-pill ${meta.pill}">${meta.label}</span></td>
           <td>${SOURCE_LABEL[r.source] ?? r.source}</td>
-          <td>¥${yenFmt.format(r.price)}</td>
+          <td>${formatMenuPrice(r.price, r.price_is_from)}</td>
         </tr>
       `;
     }).join('');

@@ -466,6 +466,15 @@ async function run() {
     const menuValues = await waitForRealOptions(page.locator('#crMenu'));
     await page.selectOption('#crMenu', menuValues[0]);
 
+    // 複数メニュー選択(2026-09-24〜): 主メニューを選ぶと追加メニュー・オプションのチェックボックスが出る。
+    // オプション(顔剃り等)を1つ追加し、合計表示と、サーバー側の合算(連結名)が反映されることを確認する。
+    await page.locator('#crExtrasField').waitFor({ state: 'visible', timeout: 10000 });
+    await page.locator('#crExtras input[data-category="option"]').first().check();
+    const createMenuSummary = await page.locator('#crMenuSummary').innerText();
+    if (!createMenuSummary.includes('合計') || !createMenuSummary.includes('所要')) {
+      throw new Error(`メニューの合計表示が出ていません: "${createMenuSummary}"`);
+    }
+
     // 「指名なし」は2026-09-18に廃止し、担当スタイリストの選択が必須になった。
     // 選択しないと空き枠自体が取得されない(#crSlotが「担当スタイリストを選択すると
     // 表示されます」のままになる)。
@@ -498,6 +507,9 @@ async function run() {
     const createdReservation = await createResponse.json();
     if (!createdReservation.id) {
       throw new Error(`予約作成のレスポンスにidが含まれていません: ${JSON.stringify(createdReservation)}`);
+    }
+    if (!String(createdReservation.menu_name ?? '').includes(' + ')) {
+      throw new Error(`複数メニュー(主メニュー+オプション)の連結名になっていません: ${createdReservation.menu_name}`);
     }
     const reservationSelector = `#scheduleArea .reservation-card[data-id="${createdReservation.id}"]`;
     await page.locator('#createReservationModal').waitFor({ state: 'hidden', timeout: 15000 });
@@ -644,6 +656,8 @@ async function run() {
       .from('menus')
       .select('id, duration_minutes')
       .eq('is_active', true)
+      .eq('category', 'cut') // オプションは単独で予約できないため、空き枠確認には主メニュー(カット)を使う
+      .order('sort_order', { ascending: true })
       .limit(1)
       .maybeSingle();
     if (menuFetchErr || !activeMenu) {

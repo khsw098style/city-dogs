@@ -206,7 +206,12 @@
 
       <h2 class="content-heading" id="content-menus">MENU &amp; PRICE(メニュー・料金)</h2>
       <p class="content-note">
-        過去に予約で使われたことのあるメニューは削除できません(削除ボタンを押すとエラーになります)。その場合は掲載を終了する形で「LPに公開する」のチェックを外してください。一度も使われていないメニュー(登録ミスなど)は削除できます。
+        過去に予約で使われたことのあるメニューは削除できません(削除ボタンを押すとエラーになります)。その場合は掲載を終了する形で「公開する」のチェックを外してください。一度も使われていないメニュー(登録ミスなど)は削除できます。
+      </p>
+      <p class="content-note">
+        メニューは「区分」(カット/カラー/パーマ/オプション)ごとに登録します。お客様は予約画面で、カット・カラー・パーマから主メニューを選び、
+        そこにオプション(顔剃り・眉毛整え等)や他の区分のメニューを追加できます。カットとカラーは各区分から1つまで、パーマ区分(パーマ・ツイスト)は併用できます。料金・所要時間は選んだメニューの単純合算です(セット割引はありません)。
+        「〜」付き(下限価格)にチェックしたメニューを含む予約は、料金が「¥9,500〜」のように表示されます。
       </p>
       <div id="menuCards" class="content-card-list">
         <p class="status-text">読み込み中…</p>
@@ -215,7 +220,17 @@
         <summary class="add-form-label">＋ 新規登録</summary>
         <form id="menuAddForm">
           <div class="field"><label for="menuAddName">メニュー名</label><input type="text" id="menuAddName" required></div>
+          <div class="field">
+            <label for="menuAddCategory">区分</label>
+            <select id="menuAddCategory">
+              <option value="cut">カット(1予約で1つまで)</option>
+              <option value="color">カラー(1予約で1つまで)</option>
+              <option value="perm">パーマ(併用可)</option>
+              <option value="option">オプション(追加専用)</option>
+            </select>
+          </div>
           <div class="field"><label for="menuAddPrice">価格(円・税込)</label><input type="text" id="menuAddPrice" inputmode="numeric" required></div>
+          <div class="field"><label><input type="checkbox" id="menuAddPriceFrom"> 「〜」付き(下限価格)</label></div>
           <div class="field"><label for="menuAddDuration">所要時間(分)</label><input type="text" id="menuAddDuration" inputmode="numeric" required></div>
           <div class="field"><label for="menuAddDescription">説明文</label><input type="text" id="menuAddDescription"></div>
           <div class="field"><label for="menuAddSort">表示順</label><input type="text" id="menuAddSort" inputmode="numeric" value="0"></div>
@@ -341,9 +356,14 @@
       <div class="field"><label for="crPhone">電話番号</label><input type="text" id="crPhone" placeholder="098-123-4567 / 090-1234-5678" required></div>
       <div class="field"><label for="crEmail">メールアドレス(任意)</label><input type="email" id="crEmail" placeholder="未入力可(確認メールを送りません)"></div>
       <div class="field">
-        <label for="crMenu">メニュー</label>
+        <label for="crMenu">メニュー(カット・カラー・パーマから1つ)</label>
         <select id="crMenu" required><option value="">読み込み中…</option></select>
       </div>
+      <div class="field" id="crExtrasField" hidden>
+        <label>追加メニュー・オプション(任意)</label>
+        <div id="crExtras" class="check-list"></div>
+      </div>
+      <p class="cr-menu-summary" id="crMenuSummary" hidden></p>
       <div class="field">
         <label for="crStaff">担当スタイリスト</label>
         <select id="crStaff" required><option value="" disabled selected>選択してください</option></select>

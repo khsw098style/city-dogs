@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ApiError, jsonResponse } from "../_shared/http.ts";
 import { parseTstzRange } from "../_shared/range.ts";
+import { loadReservationMenuLabels } from "../_shared/menuSelection.ts";
 import { normalizePhone } from "../_shared/validation.ts";
 
 const PAGE_SIZE_DEFAULT = 50;
@@ -77,6 +78,7 @@ export async function listReservations(url: URL, client: SupabaseClient, headers
   const staffNameById = new Map((staffRows ?? []).map((s) => [s.id as string, s.name as string]));
   const menuNameById = new Map((menuRows ?? []).map((m) => [m.id as string, m.name as string]));
   const custById = new Map((custRows ?? []).map((c) => [c.id as string, c]));
+  const menuLabels = await loadReservationMenuLabels(client, (reservations ?? []).map((r) => r.id as string));
 
   const result = (reservations ?? []).map((r) => {
     const range = parseTstzRange(r.time_range as unknown as string);
@@ -92,7 +94,9 @@ export async function listReservations(url: URL, client: SupabaseClient, headers
       staff_id: r.staff_id ?? null,
       staff_name: r.staff_id ? staffNameById.get(r.staff_id as string) ?? null : null,
       menu_id: r.menu_id,
-      menu_name: menuNameById.get(r.menu_id as string) ?? null,
+      // 複数メニュー選択の予約は連結名(「カット + パーマ」)。内訳のない古い予約は主メニュー名にフォールバック。
+      menu_name: menuLabels.get(r.id as string)?.name ?? menuNameById.get(r.menu_id as string) ?? null,
+      price_is_from: menuLabels.get(r.id as string)?.priceIsFrom ?? false,
       customer: custById.get(r.customer_id as string) ?? null,
     };
   });

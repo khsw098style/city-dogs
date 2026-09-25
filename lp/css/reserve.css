@@ -118,11 +118,70 @@
 }
 
 /* ---------- Step 1: menu options ---------- */
+.wizard-lead {
+  margin: -0.6rem 0 1.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
 .option-list {
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
 }
+/* 区分(カット/カラー/パーマ/オプション)ごとのまとまり。見出し+ヒント+カード群 */
+.menu-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+}
+.menu-group:first-child { margin-top: 0; }
+.menu-group-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.8rem;
+  margin: 0;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--surface-line);
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  color: var(--cream);
+}
+.menu-group-hint {
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+.menu-group[hidden] { display: none; }
+.menu-group.is-addon .menu-group-heading { color: var(--gold-light); }
+
+/* 選択中のメニューの合計(料金・所要時間の目安) */
+.selection-summary {
+  margin-top: 1.4rem;
+  padding: 1rem 1.2rem;
+  background: rgba(31,101,82,0.08);
+  border: 1px solid var(--gold);
+  border-radius: 6px;
+  font-size: 0.88rem;
+}
+.selection-summary[hidden] { display: none; }
+.selection-summary-names { margin: 0 0 0.4rem; color: var(--cream); }
+.selection-summary-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 1rem;
+  margin: 0;
+}
+.selection-summary-price {
+  font-family: var(--font-accent);
+  font-size: 1.3rem;
+  color: var(--gold-light);
+  font-variant-numeric: tabular-nums;
+}
+.selection-summary-note { margin: 0.5rem 0 0; font-size: 0.75rem; color: var(--muted); }
 .option-card {
   display: flex;
   align-items: center;
@@ -143,6 +202,22 @@
 .option-card.is-selected {
   border-color: var(--gold);
   background: rgba(31,101,82,0.08);
+}
+/* 選択済みを色だけに頼らず示すチェックマーク(複数選択できるカードなので必須) */
+.option-card-main h3::before {
+  content: "";
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.5em;
+  vertical-align: -0.12em;
+  border: 1.5px solid var(--surface-line);
+  border-radius: 3px;
+  background: transparent;
+}
+.option-card.is-selected .option-card-main h3::before {
+  border-color: var(--gold);
+  background: var(--gold) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7' stroke='white' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 80% no-repeat;
 }
 .option-card-main h3 {
   margin: 0 0 0.3rem;

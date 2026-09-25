@@ -102,6 +102,21 @@
     }
   }
 
+  // 複数メニュー選択の予約は、reservation_itemsの内訳をsort_order順に「カット + パーマ」と連結表示する。
+  // 内訳のない古い予約は主メニュー名にフォールバックする。
+  function menuNamesOf(r) {
+    const names = (r.reservation_items ?? [])
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((i) => i.menus?.name)
+      .filter(Boolean);
+    return names.length > 0 ? names.join(' + ') : (r.menus?.name ?? '');
+  }
+  function priceLabelOf(r) {
+    const isFrom = (r.reservation_items ?? []).some((i) => i.price_is_from);
+    return `¥${yenFmt.format(r.price_at_booking)}${isFrom ? '〜' : ''}`;
+  }
+
   function renderReservation(token, r) {
     const range = parseTimeRange(r.time_range);
     const meta = STATUS_META[r.status] || { label: r.status, pill: 'is-muted' };
@@ -115,10 +130,10 @@
         </div>
         <div class="manage-details">
           <dl>
-            <dt>メニュー</dt><dd>${escapeHtml(r.menus?.name ?? '')}</dd>
+            <dt>メニュー</dt><dd>${escapeHtml(menuNamesOf(r))}</dd>
             <dt>日時</dt><dd>${range ? `${jstDateFmt.format(range.start)} ${jstTimeFmt.format(range.start)}〜${jstTimeFmt.format(range.end)}` : ''}</dd>
             <dt>担当</dt><dd>${escapeHtml(r.staff?.name ?? '')}</dd>
-            <dt>料金</dt><dd>¥${yenFmt.format(r.price_at_booking)}</dd>
+            <dt>料金</dt><dd>${priceLabelOf(r)}</dd>
             ${r.notes ? `<dt>ご要望</dt><dd>${escapeHtml(r.notes)}</dd>` : ''}
           </dl>
         </div>
