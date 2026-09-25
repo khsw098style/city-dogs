@@ -147,7 +147,17 @@
       });
     }
 
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
+  }
+
+  // 画面(ステップ)を切り替えたら、次の画面の先頭が見える位置(ページ最上部)へ移動する。
+  // アニメーション(スムーズスクロール)にしないのは、長いメニュー一覧から短い日時画面へ切り替わる時にページの高さが
+  // 一気に縮み、スマホ(特にiOS Safari)ではアニメーションが途中で打ち切られて中途半端な位置で止まることがあるため。
+  // behavior: 'instant'は、CSSのhtml { scroll-behavior: smooth }よりも優先される。
+  // レイアウトが確定した次のフレームでも、もう一度先頭にそろえる。
+  function scrollToTop() {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' }));
   }
 
   document.querySelectorAll('[data-back]').forEach((btn) => {

@@ -295,7 +295,21 @@ textarea { resize: vertical; }
 
 .date-input {
   color-scheme: light;
+  /* iOS Safari(iOS版のChrome/Brave等も同じWebKit)はinput[type="date"]を独自の「ピル型」ボタンとして描画し、
+     width/max-widthのCSS指定を無視して内部コンテンツ優先の幅で描画するため、スマホで枠から横にはみ出す。
+     -webkit-appearance: noneでネイティブ描画をやめさせ、通常のテキスト入力と同じボックスモデルに従わせる
+     (管理画面には2026-09-20に同じ対処済み: booking/admin/css/admin.css)。 */
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  /* appearance: noneにすると、iOSは値が空の日付入力の高さを潰すため、他の入力欄と同じ高さを明示する。 */
+  min-height: 3.1rem;
+  text-align: left;
 }
+/* iOSは日付の表示部分を中央寄せにするので、他の入力欄と同じ左寄せにそろえる。 */
+.date-input::-webkit-date-and-time-value { text-align: left; }
 
 .slot-area {
   min-height: 3rem;
