@@ -40,6 +40,7 @@
 // `npx supabase secrets set TURNSTILE_SECRET_KEY=...`はここには一切効果が無い
 // (以前の版ではreserve.e2e.mjsと同じ手順が必要であるかのように書いていたが誤り)。
 
+// ⚠️ このテストの確認内容を変えたら、リポジトリ直下の TESTING.md(何をどの順で確認しているかの一覧)も同じ変更で更新すること。
 import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
 import { spawn, spawnSync } from 'node:child_process';
@@ -119,10 +120,12 @@ const TEST_SHIFTS_MONTH = monthValueOf(new Date(new Date().getFullYear(), new Da
 // コールドスタート時など読めない。固定のwaitForTimeoutだけに頼ると、再描画前に判定して
 // しまい「追加した行が見つからない」という誤検知(実機で確認済み)につながるため、一覧の
 // 末尾要素の該当フィールドが期待値になるまでポーリングして待つ。
-async function waitForLastCardWithValue(listLocator, fieldSelector, expectedValue, timeoutMs = 10000) {
+// cardSelector: 対象にするカード。メニュー一覧は「非公開のメニュー」折りたたみ欄の中にもカードがあり、
+// その最後のカードが「末尾」になってしまうため、公開中(欄の外=直下)のカードだけに絞れるようにしている。
+async function waitForLastCardWithValue(listLocator, fieldSelector, expectedValue, timeoutMs = 10000, cardSelector = '.content-card') {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const card = listLocator.locator('.content-card').last();
+    const card = listLocator.locator(cardSelector).last();
     if ((await card.count()) > 0) {
       const value = await card.locator(fieldSelector).inputValue().catch(() => null);
       if (value === expectedValue) return card;
@@ -424,6 +427,18 @@ async function run() {
     console.log('   写真の追加・編集・削除を確認');
 
     console.log('8. MENU & PRICE(メニュー): 追加→編集→削除...');
+    // 非公開のメニュー(旧セットメニュー等)は折りたたみ欄にまとまり、既定では閉じている(2026-09-25〜)。
+    // 公開中のメニューはその外に並ぶ。新規DBには非公開メニューが無いので、欄がある時だけ検証する。
+    const inactiveGroup = page.locator('#menuCards .menu-inactive-group');
+    if ((await inactiveGroup.count()) > 0) {
+      if (await inactiveGroup.evaluate((d) => d.open)) throw new Error('「非公開のメニュー」欄が既定で開いています。');
+      if ((await inactiveGroup.locator('.f-active:checked').count()) !== 0) {
+        throw new Error('「非公開のメニュー」欄に、公開中のメニューが混ざっています。');
+      }
+    }
+    if ((await page.locator('#menuCards > .content-card .f-active:not(:checked)').count()) !== 0) {
+      throw new Error('折りたたみ欄の外(通常表示)に、非公開のメニューが混ざっています。');
+    }
     await page.click('#menuAddSection summary');
     await page.fill('#menuAddName', TEST_MENU_NAME);
     await page.fill('#menuAddPrice', '1234');
@@ -431,7 +446,7 @@ async function run() {
     await page.fill('#menuAddDescription', 'E2Eテストで自動作成されたメニューです。');
     await page.fill('#menuAddSort', '999');
     await page.click('#menuAddForm button[type="submit"]');
-    card = await waitForLastCardWithValue(page.locator('#menuCards'), '.f-name', TEST_MENU_NAME);
+    card = await waitForLastCardWithValue(page.locator('#menuCards'), '.f-name', TEST_MENU_NAME, 10000, ':scope > .content-card');
     const menuCardId = await card.getAttribute('data-id'); // 理由は特徴カードの箇所のコメント参照
     await card.locator('.f-price').fill('1500');
     await card.locator('.save-btn').click();
@@ -566,6 +581,65 @@ async function run() {
     const movedCard = page.locator(reservationSelector);
     await movedCard.waitFor({ timeout: 10000 });
     console.log('   リスケジュール(別日の空き枠への移動)を確認');
+
+    console.log('12b. 会計完了(実際の会計金額の入力): 会計待ち → 完了、完了後の金額修正...');
+    // 会計待ちへ。会計完了以外への変更では会計金額の入力欄は出さない。
+    await page.locator(reservationSelector).locator('.edit-reservation-btn').click();
+    await page.locator('#editReservationModal').waitFor({ state: 'visible' });
+    await page.selectOption('#editStatusSelect', 'awaiting_checkout');
+    if (await page.locator('#editFinalPriceField').isVisible()) {
+      throw new Error('会計完了以外への変更なのに、会計金額の入力欄が表示されています。');
+    }
+    if (await page.locator('#editCheckoutSection').isVisible()) {
+      throw new Error('会計完了前の予約なのに、会計金額の保存セクションが表示されています。');
+    }
+    await page.click('#editStatusForm button[type="submit"]');
+    await page.locator('#editReservationModal').waitFor({ state: 'hidden', timeout: 10000 });
+    await waitForLocatorText(page.locator(reservationSelector).locator('.status-pill'), '会計待ち');
+
+    // 会計完了へ。会計金額の入力欄が現れ、「〜」なしの予約は予約時点の金額が初期値になる。
+    await page.locator(reservationSelector).locator('.edit-reservation-btn').click();
+    await page.locator('#editReservationModal').waitFor({ state: 'visible' });
+    await page.selectOption('#editStatusSelect', 'completed');
+    await page.locator('#editFinalPriceField').waitFor({ state: 'visible', timeout: 5000 });
+    const prefilledPrice = await page.inputValue('#editFinalPriceInput');
+    if (!/^\d+$/.test(prefilledPrice) || Number(prefilledPrice) <= 0) {
+      throw new Error(`会計金額の初期値が予約時点の金額(正の整数)になっていません: "${prefilledPrice}"`);
+    }
+    // 数字でない入力は、送信前にエラー表示して弾く(ステータスは変わらない)。
+    await page.fill('#editFinalPriceInput', 'abc');
+    await page.click('#editStatusForm button[type="submit"]');
+    await page.locator('#editStatusError').waitFor({ state: 'visible', timeout: 5000 });
+    const invalidPriceError = await page.locator('#editStatusError').innerText();
+    if (!invalidPriceError.includes('数字')) {
+      throw new Error(`不正な会計金額のエラー表示が想定と異なります: "${invalidPriceError}"`);
+    }
+    if (!(await page.locator('#editReservationModal').isVisible())) {
+      throw new Error('不正な会計金額なのに、モーダルが閉じてステータスが変更されてしまっています。');
+    }
+    // 値引きを想定した金額(カンマ付き)を入力して会計完了にする。
+    await page.fill('#editFinalPriceInput', '3,900');
+    await page.click('#editStatusForm button[type="submit"]');
+    await page.locator('#editReservationModal').waitFor({ state: 'hidden', timeout: 10000 });
+    await waitForLocatorText(page.locator(reservationSelector).locator('.status-pill'), '完了');
+    await waitForLocatorText(page.locator(reservationSelector).locator('.reservation-card-menu'), '¥3,900');
+
+    // 完了後: ステータス変更フォームは出ず、会計金額の保存セクションから金額を修正できる。
+    await page.locator(reservationSelector).locator('.edit-reservation-btn').click();
+    await page.locator('#editReservationModal').waitFor({ state: 'visible' });
+    if (await page.locator('#editStatusForm').isVisible()) {
+      throw new Error('完了済みの予約なのに、ステータス変更フォームが表示されています。');
+    }
+    await page.locator('#editCheckoutSection').waitFor({ state: 'visible', timeout: 5000 });
+    const savedCheckout = await page.inputValue('#editCheckoutInput');
+    if (savedCheckout !== '3900') {
+      throw new Error(`保存済みの会計金額が入力欄に反映されていません: "${savedCheckout}"(期待値: 3900)`);
+    }
+    await page.fill('#editCheckoutInput', '4100');
+    await page.click('#editCheckoutForm button[type="submit"]');
+    await page.locator('#editReservationModal').waitFor({ state: 'hidden', timeout: 10000 });
+    await waitForLocatorText(page.locator(reservationSelector).locator('.reservation-card-menu'), '¥4,100');
+    console.log('   会計金額の入力(会計完了時)・不正入力の拒否・完了後の金額修正を確認');
 
     console.log('13. 営業日・シフトタブ(カレンダー表示): 生成→編集を確認...');
     await page.click('.tab-btn[data-tab="shifts"]');

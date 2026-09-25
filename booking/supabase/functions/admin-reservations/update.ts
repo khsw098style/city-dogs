@@ -3,12 +3,15 @@ import { ApiError, jsonResponse } from "../_shared/http.ts";
 import { computeSlotsForDuration, jstDateOf } from "../_shared/availability.ts";
 import { parseTstzRange } from "../_shared/range.ts";
 import { isValidUuid, requireNonEmptyString } from "../_shared/validation.ts";
+import { resolveFinalPrice } from "../_shared/checkout.ts";
 
 interface UpdateReservationBody {
   status?: string;
   cancel_reason?: string;
   staff_id?: string;
   start_at?: string;
+  /** 実際の会計金額(円)。会計完了の予約のみ。ルールは _shared/checkout.ts。 */
+  final_price?: unknown;
 }
 
 // api-design.md「予約ステータスの状態遷移」表そのもの。ここにない遷移はすべて拒否する。
@@ -102,9 +105,30 @@ export async function updateReservation(
     if (body.cancel_reason !== undefined) patch.cancel_reason = body.cancel_reason?.trim() || null;
   }
 
+  // 実際の会計金額(2026-09-25〜)。「〜」付きメニューを含む予約を会計完了にする時は入力必須。
+  // 「〜」付きかどうかの確認(DB問い合わせ)は、その判定が必要な「completedへの変更で金額未指定」の時だけ行う。
+  let hasEstimatedPrice = false;
+  if (body.status === "completed" && body.final_price === undefined) {
+    const { data: fromItems, error: itemsErr } = await client
+      .from("reservation_items")
+      .select("id")
+      .eq("reservation_id", id)
+      .eq("price_is_from", true)
+      .limit(1);
+    if (itemsErr) throw new ApiError("INTERNAL_ERROR", "予約情報の取得に失敗しました。");
+    hasEstimatedPrice = (fromItems ?? []).length > 0;
+  }
+  const finalPrice = resolveFinalPrice({
+    currentStatus: current.status as string,
+    newStatus: body.status,
+    finalPrice: body.final_price,
+    hasEstimatedPrice,
+  });
+  if (finalPrice !== undefined) patch.final_price = finalPrice;
+
   if (Object.keys(patch).length === 1) {
     // updated_atしか入っていない = statusもstaff_id/start_atも指定されていない
-    throw new ApiError("VALIDATION_ERROR", "status または staff_id/start_at のいずれかを指定してください。");
+    throw new ApiError("VALIDATION_ERROR", "status、staff_id/start_at、final_price のいずれかを指定してください。");
   }
 
   // SELECTで読んだ時点のstatusを条件に付け、原子的に判定する(SELECTとUPDATEの間に
@@ -116,7 +140,7 @@ export async function updateReservation(
     .update(patch)
     .eq("id", id)
     .eq("status", current.status as string)
-    .select("id, reservation_number, status, staff_id, time_range, cancel_reason")
+    .select("id, reservation_number, status, staff_id, time_range, cancel_reason, final_price")
     .maybeSingle();
 
   if (updateErr) {
@@ -140,6 +164,7 @@ export async function updateReservation(
       start_at: range.start.toISOString(),
       end_at: range.end.toISOString(),
       cancel_reason: updated.cancel_reason,
+      final_price: updated.final_price,
     },
     { headers },
   );

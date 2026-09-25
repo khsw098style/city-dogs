@@ -29,6 +29,7 @@
 // テスト終了後は必ず本番の実キーに戻すこと。戻し忘れると、本番のTurnstile保護が
 // 効かなくなる(誰のトークンでも通ってしまう)ので特に注意。
 
+// ⚠️ このテストの確認内容を変えたら、リポジトリ直下の TESTING.md(何をどの順で確認しているかの一覧)も同じ変更で更新すること。
 import { chromium } from 'playwright';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';

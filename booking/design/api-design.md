@@ -184,6 +184,13 @@ LPのCONCEPT/SHOP & STYLE/STAFFセクションを描画するための表示デ�
 
 サーバー側で「[ステータス遷移](#予約ステータスの状態遷移)」表に定義した許可遷移のみ受け付け、それ以外は `409 INVALID_STATUS_TRANSITION`。`cancelled_by_salon`/`no_show`/`declined` への遷移時は `cancel_reason` を必須にする。
 
+**Request例**(会計完了。2026-09-25〜、実際の会計金額を同時に記録):
+```json
+{ "status": "completed", "final_price": 15500 }
+```
+
+`final_price`(円、0以上の整数)は`completed`の予約にのみ設定でき、「〜」付きメニュー(`price_is_from`)を含む予約を`completed`にする時は必須(未指定だと`VALIDATION_ERROR`)。既に`completed`の予約の金額修正は`{ "final_price": 4100 }`だけで可能。売上の見込み・実績はこの金額を優先し、未入力なら予約時点の`price_at_booking`で集計する(`GET /admin-reservations/revenue-summary`は下限額を含む場合`forecast_has_estimate`/`actual_has_estimate`を`true`で返す)。ルールの実装は`_shared/checkout.ts`。
+
 **Request例**(リスケジュール、`staff_id`と`start_at`はどちらか一方だけでも可):
 ```json
 { "staff_id": "…", "start_at": "2026-09-21T11:00:00+09:00" }

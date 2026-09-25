@@ -320,6 +320,7 @@ input[type="date"] { -webkit-appearance: none; appearance: none; }
 .revenue-total .revenue-block + .revenue-block { border-top: none; }
 .revenue-label { margin: 0 0 0.3rem; font-size: 0.76rem; color: var(--muted); }
 .revenue-count { margin: 0; font-size: 0.78rem; color: var(--faint); }
+.revenue-note { margin: 0.2rem 0 0; font-size: 0.72rem; color: var(--faint); }
 .revenue-amount {
   margin: 0.1rem 0 0;
   font-size: 1.3rem;
@@ -502,6 +503,51 @@ table.search-table tr:last-child td { border-bottom: none; }
 .content-card-actions .save-status { font-size: 0.78rem; color: var(--muted); }
 .content-card-actions .save-status.is-error { color: var(--st-danger); }
 .content-card-actions .save-status.is-ok { color: var(--st-done); }
+
+/* メニューの編集カードは、縦に長くなりすぎないよう2行のコンパクトなグリッドにする(2026-09-25)。
+   1行目: 名前・区分・価格・所要・表示順 / 2行目: 説明・「〜」・公開 / 3行目: 操作ボタン。 */
+.content-card.menu-card {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0.5rem 0.8rem;
+  align-items: end;
+  padding: 0.7rem 0.9rem;
+}
+.content-card.menu-card > .field,
+.content-card.menu-card > .field:last-of-type { margin: 0; min-width: 0; }
+.menu-card .field label { font-size: 0.72rem; }
+.menu-card .mc-name { grid-column: span 4; }
+.menu-card .mc-category { grid-column: span 3; }
+.menu-card .mc-price { grid-column: span 2; }
+.menu-card .mc-duration { grid-column: span 2; }
+.menu-card .mc-sort { grid-column: span 1; }
+.menu-card .mc-description { grid-column: span 4; }
+.menu-card .mc-from { grid-column: span 3; }
+.menu-card .mc-active { grid-column: span 2; }
+.menu-card .mc-from, .menu-card .mc-active { padding-bottom: 0.45rem; }
+.menu-card .mc-from label, .menu-card .mc-active label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; }
+.menu-card .content-card-actions { grid-column: span 3; flex-wrap: nowrap; padding-bottom: 0.1rem; }
+@media (max-width: 900px) {
+  .menu-card .mc-name, .menu-card .mc-description { grid-column: span 12; }
+  .menu-card .mc-category, .menu-card .mc-price, .menu-card .mc-duration, .menu-card .mc-sort { grid-column: span 6; }
+  .menu-card .mc-from, .menu-card .mc-active { grid-column: span 6; }
+  .menu-card .content-card-actions { grid-column: 1 / -1; }
+}
+
+/* 非公開のメニュー(旧セットメニュー等)の折りたたみ欄 */
+.menu-inactive-group {
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  padding: 0.55rem 0.9rem;
+}
+.menu-inactive-group > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.menu-inactive-group[open] > summary { margin-bottom: 0.7rem; }
+.menu-inactive-hint { margin-left: 0.8rem; font-size: 0.75rem; font-weight: 400; color: var(--faint); }
 
 /* 追加フォームは編集カード(.content-card)と同じ縦並び(項目を上から順に積む)に統一する。
    以前はauto-fitで項目を横並びにしていたが、編集カードとの見た目の一貫性を優先し、

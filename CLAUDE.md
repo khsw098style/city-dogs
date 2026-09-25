@@ -44,7 +44,7 @@
 
 | レイヤー | 技術 | 備考 |
 |----------|------|------|
-| データベース | PostgreSQL(Supabase) | スキーマは [booking/supabase/migrations/](./booking/supabase/migrations/)(0001〜0012) |
+| データベース | PostgreSQL(Supabase) | スキーマは [booking/supabase/migrations/](./booking/supabase/migrations/)(0001〜0013) |
 | API | Supabase Edge Functions(Deno/TypeScript) | テーブルへの直接アクセス(PostgREST自動API)は使わず必ずこの層を経由。設計は [booking/design/api-design.md](./booking/design/api-design.md)。全テーブルRLS有効化済み(ポリシーなし、service_roleのみアクセス可) |
 | 認証(予約管理画面) | Supabase Auth(email/password)。`staff.auth_user_id`でstaffと紐付け | `_shared/auth.ts`のrequireStaff()で検証。顧客側(公開API)は認証なし |
 | 予約管理画面(`booking/admin/`) | HTML / CSS / Vanilla JS + `@supabase/supabase-js`(CDN) | スタッフ・オーナー向け内部ツール。予約管理・LPコンテンツ編集・営業日/シフト設定・顧客管理まですべて実装済み(api-design.md記載の機能はすべて完了) |
@@ -64,6 +64,7 @@ city-dogs/
 ├── CLAUDE.md                    # プロジェクト概要・役割定義(このファイル)
 ├── CHANGELOG.md                 # 過去の実装経緯・トラブルシュート記録(自動読み込みされない)
 ├── TEMPLATE.md                  # 新規店舗展開時のチェックリスト
+├── TESTING.md                   # テスト(E2E・単体)が何をどの順で確認しているかの一覧と実行方法
 ├── lp/                          # LP(静的サイト・公開中)
 │   ├── index.html
 │   ├── reserve.html             # WEB予約ウィザード(3ステップ、メールアドレス必須)
@@ -98,7 +99,7 @@ city-dogs/
     └── supabase/
         ├── README.md             # セットアップ・デプロイ手順
         ├── seed.sql              # 🏪店舗固有: 動作確認用テストデータ
-        ├── migrations/           # 0001〜0012(詳細はCHANGELOG.md、内容はマイグレーションファイル自体を参照)
+        ├── migrations/           # 0001〜0013(詳細はCHANGELOG.md、内容はマイグレーションファイル自体を参照)
         └── functions/
             ├── deno.json
             ├── _shared/          # 空き枠計算・認証・range解析・バリデーション・メール送信等。*.test.ts同居
@@ -110,6 +111,8 @@ city-dogs/
 ```
 
 ## テスト
+
+**テストの内容・実行手順・Turnstileテスト用キーの切り替えは[TESTING.md](./TESTING.md)にまとめてある。E2Eテストや単体テストの確認内容を変えたら、必ず同じ変更でTESTING.md(該当する手順と、末尾の「確認していないこと」)も更新すること。**
 
 いずれもサーバー起動〜終了まで1コマンドで完結する。**実際にデプロイ済みの本番相当Supabaseに対してテストデータを作成する**(テスト予約`B0000000xx`がDBに残る。気になれば後でSQL Editorからまとめて削除する)。
 
@@ -124,7 +127,7 @@ cd city-dogs/booking
 npm run test
 ```
 
-`_shared/availability.ts`・`_shared/range.ts`・`_shared/validation.ts`・`_shared/rateLimit.ts`に対する`Deno.test`ベースの単体テスト(65件、オールグリーン)。
+`_shared/availability.ts`・`_shared/range.ts`・`_shared/validation.ts`・`_shared/rateLimit.ts`に対する`Deno.test`ベースの単体テスト(96件、オールグリーン。`menuSelection.ts`・`checkout.ts`・`revenue.ts`等も対象)。
 
 ### 予約UI(顧客向け)
 
@@ -155,6 +158,7 @@ SUPABASE_SERVICE_ROLE_KEY=<Project Settings > API のservice_roleキー> npm run
 - **予約管理リンク(`manage_token`方式)は実装済みだが実運用不可**: `MANAGE_PAGE_BASE_URL`が独自ドメイン未確定のため未設定。設定するまでメール内リンクは`https://your-domain-not-configured.example/manage.html`というプレースホルダーのまま送信される
 - **独自ドメイン確定後に必ずやること**: `ALLOWED_ORIGINS`・`MANAGE_PAGE_BASE_URL`・`RESEND_FROM_ADDRESS`のsecretを新ドメインの値に更新(TEMPLATE.md参照)。**ローカルE2Eテスト用のlocalhostオリジン(`http://localhost:5500`/`5501`/`5502`)は`ALLOWED_ORIGINS`に残すこと**(消すと既存のテストスイートが壊れる)
 - **メニューは区分(カット/カラー/パーマ/オプション)付きの複数選択制(2026-09-24)**: 予約は`reservation_items`に内訳を持ち、料金・時間は単純合算。所要時間は店舗回答(2026-09-25)反映済み。施術後のインターバルは「不要」と確認済みなので実装しない。パーマ・ツイストは併用可(カット・カラーは各1つまで)。詳細はCHANGELOG.md
+- **「〜」付きメニューの実際の会計金額(2026-09-25)**: 予約編集画面で「会計完了」にする時に実際の金額を入力(`reservations.final_price`、「〜」付きを含む予約は必須)。売上の見込み・実績はこの金額を優先。詳細はCHANGELOG.md
 - **staff.roleは当面、管理APIの認可には使わない(全スタッフ同権限)と決定済み(2026-09-18)**: スタイリスト2名+アシスタント1名程度の運用規模であれば権限差別化の必要性が薄いため。`staff.role`列自体はLP表示用(紹介文・指名リストの絞り込み)にそのまま使う。将来差別化したくなった場合もスキーマ変更は不要で、`_shared/auth.ts`に`requireOwner()`のような認可ヘルパーを追加するだけで対応できる(ただしオーナーの実ログインが現状スタイリストのstaffレコードに仮で紐付いている状態なので、先にオーナー専用staffレコードを分離する必要がある)
 - **Google口コミ連携は規約上の理由で撤回済み**(詳細はCHANGELOG.md)。評価バッジは管理画面「LPコンテンツ」タブから手動更新する方式(`site_rating`テーブル)
 - **「指名なし(おまかせ)」は廃止し、担当スタイリストの指名を常に必須にした(2026-09-18)**: LP予約・管理画面の電話予約登録・リスケジュールいずれも`staff_id`必須(`GET /availability`もサーバー側で必須化)。詳細・廃止理由はCHANGELOG.md参照。将来的にメニューごとの担当可能スタッフ制限や、指名なし時の割り当てロジックを検討する余地はあるが未着手

@@ -4,6 +4,11 @@
 // 「実績」= そのうちcompleted(会計完了)のみ(実際に確定した売上)。
 // 2026-09-18、ユーザーとの合意に基づく定義。
 //
+// 金額(2026-09-25〜): 会計完了(completed)の予約に「実際の会計金額」(final_price)が入力されていれば、
+// 見込み・実績のどちらでもそれを使う(確定した金額なので)。未入力ならprice_at_booking(予約時点の金額)。
+// 「〜」付きメニュー(下限価格)を含み、かつ会計金額が確定していない予約が含まれる集計は、
+// 金額が下限であることを画面に示すためforecast_has_estimate/actual_has_estimateをtrueにする。
+//
 // I/O(Supabase呼び出し)とは分離した純粋関数にしてあるので、Supabase接続なしで
 // 単体テストできる(revenue.test.ts参照。availability.tsのgenerateSlots()と同じ方針)。
 
@@ -19,6 +24,10 @@ export interface ReservationForRevenue {
   staff_id: string;
   status: string;
   price_at_booking: number;
+  /** 実際の会計金額。completedの予約のみ設定される。 */
+  final_price?: number | null;
+  /** 予約に「〜」付き(price_is_from)のメニューが含まれるか。 */
+  has_estimated_price?: boolean;
 }
 
 export interface StaffInfoForRevenue {
@@ -33,6 +42,23 @@ export interface StaffRevenueSummary {
   forecast_amount: number;
   actual_count: number;
   actual_amount: number;
+  /** 見込みの合計に、会計金額が未確定の「〜」付き予約(下限価格で計上)が含まれる。 */
+  forecast_has_estimate: boolean;
+  /** 実績の合計に、会計金額が未入力の「〜」付き予約(下限価格で計上)が含まれる(過去データ等)。 */
+  actual_has_estimate: boolean;
+}
+
+// 会計金額が確定しているか(completedかつfinal_price入力済み)。
+function hasConfirmedPrice(r: ReservationForRevenue): boolean {
+  return r.status === "completed" && r.final_price != null;
+}
+
+function effectiveAmount(r: ReservationForRevenue): number {
+  return hasConfirmedPrice(r) ? (r.final_price as number) : r.price_at_booking;
+}
+
+function isEstimate(r: ReservationForRevenue): boolean {
+  return Boolean(r.has_estimated_price) && !hasConfirmedPrice(r);
 }
 
 export function aggregateRevenueByStaff(
@@ -42,7 +68,16 @@ export function aggregateRevenueByStaff(
   const summaryByStaff = new Map<string, StaffRevenueSummary>(
     staffList.map((s) => [
       s.id,
-      { staff_id: s.id, staff_name: s.name, forecast_count: 0, forecast_amount: 0, actual_count: 0, actual_amount: 0 },
+      {
+        staff_id: s.id,
+        staff_name: s.name,
+        forecast_count: 0,
+        forecast_amount: 0,
+        actual_count: 0,
+        actual_amount: 0,
+        forecast_has_estimate: false,
+        actual_has_estimate: false,
+      },
     ]),
   );
 
@@ -55,11 +90,13 @@ export function aggregateRevenueByStaff(
 
     if (FORECAST_STATUSES.has(r.status)) {
       entry.forecast_count += 1;
-      entry.forecast_amount += r.price_at_booking;
+      entry.forecast_amount += effectiveAmount(r);
+      if (isEstimate(r)) entry.forecast_has_estimate = true;
     }
     if (r.status === "completed") {
       entry.actual_count += 1;
-      entry.actual_amount += r.price_at_booking;
+      entry.actual_amount += effectiveAmount(r);
+      if (isEstimate(r)) entry.actual_has_estimate = true;
     }
   }
 

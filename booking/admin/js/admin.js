@@ -132,6 +132,16 @@
     editStatusNoTransition: document.getElementById('editStatusNoTransition'),
     editReasonField: document.getElementById('editReasonField'),
     editReasonInput: document.getElementById('editReasonInput'),
+    editFinalPriceField: document.getElementById('editFinalPriceField'),
+    editFinalPriceInput: document.getElementById('editFinalPriceInput'),
+    editFinalPriceRequired: document.getElementById('editFinalPriceRequired'),
+    editFinalPriceHint: document.getElementById('editFinalPriceHint'),
+    editCheckoutSection: document.getElementById('editCheckoutSection'),
+    editCheckoutForm: document.getElementById('editCheckoutForm'),
+    editCheckoutInput: document.getElementById('editCheckoutInput'),
+    editCheckoutHint: document.getElementById('editCheckoutHint'),
+    editCheckoutError: document.getElementById('editCheckoutError'),
+    editCheckoutSaveStatus: document.getElementById('editCheckoutSaveStatus'),
     editRescheduleForm: document.getElementById('editRescheduleForm'),
     editRescheduleError: document.getElementById('editRescheduleError'),
     editRescheduleSaveStatus: document.getElementById('editRescheduleSaveStatus'),
@@ -586,7 +596,9 @@
 
     el.editStatusForm.addEventListener('submit', submitStatusChange);
     el.editRescheduleForm.addEventListener('submit', submitReschedule);
+    el.editCheckoutForm.addEventListener('submit', submitCheckout);
     el.editStatusSelect.addEventListener('change', () => {
+      el.editFinalPriceField.hidden = el.editStatusSelect.value !== 'completed';
       el.editReasonField.hidden = !REASON_REQUIRED_STATUSES.has(el.editStatusSelect.value);
     });
     el.editStaffSelect.addEventListener('change', refreshEditSlots);
@@ -621,6 +633,21 @@
   const SINGLE_SELECT_MENU_CATEGORIES = ['cut', 'color'];
   const MENU_CATEGORY_ORDER = ['cut', 'color', 'perm', 'option'];
   const MENU_CATEGORY_LABELS = { cut: 'カット', color: 'カラー', perm: 'パーマ', option: 'オプション' };
+
+  // 予約の料金表示。会計金額が確定していればそれ(実際の金額)、未確定なら予約時点の金額(「〜」付きは下限)。
+  function reservationPriceLabel(r) {
+    if (r.final_price != null) return `¥${yenFmt.format(r.final_price)}`;
+    return formatMenuPrice(r.price, r.price_is_from);
+  }
+
+  // 金額入力(全角数字・カンマ・「¥」「円」を許容)を整数に変換する。空欄はnull、不正な値はNaN。
+  function parseYenInput(raw) {
+    const normalized = String(raw ?? '')
+      .replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+      .replace(/[,，¥￥円\s]/g, '');
+    if (normalized === '') return null;
+    return /^\d+$/.test(normalized) ? Number(normalized) : Number.NaN;
+  }
 
   function formatMenuPrice(price, isFrom) {
     return `¥${yenFmt.format(price)}${isFrom ? '〜' : ''}`;
@@ -843,6 +870,32 @@
 
   let editingReservation = null; // { id, reservation_number, staff_id, start_at, status, ... }
 
+  // 会計金額の入力欄(「会計完了」への変更時と、完了後の修正用)を予約に合わせて初期化する。
+  // 「〜」付きメニューを含む予約は下限価格が入っているだけなので、誤って下限のまま保存しないよう空欄から始めて必須にする。
+  // 「〜」なしの予約は予約時点の金額を初期値にする(値引き等があれば修正)。
+  function setupFinalPriceInputs(reservation) {
+    const isFrom = Boolean(reservation.price_is_from);
+    const initial = reservation.final_price != null ? reservation.final_price : (isFrom ? '' : reservation.price);
+    const bookedLabel = formatMenuPrice(reservation.price, isFrom);
+    const hint = isFrom
+      ? `予約時点の金額は ${bookedLabel}(下限)です。実際にいただいた金額を入力してください。`
+      : `予約時点の金額は ${bookedLabel} です。値引きなどで変わる場合は修正してください。`;
+
+    el.editFinalPriceInput.value = initial === '' ? '' : String(initial);
+    el.editFinalPriceRequired.textContent = isFrom ? '(必須)' : '';
+    el.editFinalPriceHint.textContent = hint;
+    el.editFinalPriceField.hidden = true;
+
+    const isCompleted = reservation.status === 'completed';
+    el.editCheckoutSection.hidden = !isCompleted;
+    hideFormError(el.editCheckoutError);
+    el.editCheckoutSaveStatus.textContent = '';
+    el.editCheckoutInput.value = initial === '' ? '' : String(initial);
+    el.editCheckoutHint.textContent = reservation.final_price != null
+      ? `保存済みの会計金額です。予約時点の金額は ${bookedLabel} でした。`
+      : (isFrom ? `会計金額が未入力です(売上実績は下限の ${bookedLabel} で集計されています)。実際の金額を入力してください。` : hint);
+  }
+
   function openEditReservationModal(reservation) {
     editingReservation = reservation;
     const start = new Date(reservation.start_at);
@@ -851,6 +904,7 @@
       <dt>予約番号</dt><dd>${escapeHtml(reservation.reservation_number)}</dd>
       <dt>お客様</dt><dd>${escapeHtml(reservation.customer?.name ?? '(顧客不明)')} ${escapeHtml(reservation.customer?.phone ?? '')}</dd>
       <dt>メニュー</dt><dd>${escapeHtml(reservation.menu_name ?? '')}</dd>
+      <dt>料金</dt><dd>${reservationPriceLabel(reservation)}${reservation.final_price != null ? '(会計金額)' : ''}</dd>
       <dt>現在の日時</dt><dd>${jstDateFmt.format(start)} ${jstTimeFmt.format(start)}</dd>
       <dt>現在のステータス</dt><dd>${(STATUS_META[reservation.status] || {}).label ?? reservation.status}</dd>
     `;
@@ -859,6 +913,7 @@
     hideFormError(el.editRescheduleError);
     el.editReasonField.hidden = true;
     el.editReasonInput.value = '';
+    setupFinalPriceInputs(reservation);
 
     const nextStatuses = STATUS_TRANSITIONS[reservation.status] ?? [];
     if (nextStatuses.length === 0) {
@@ -871,6 +926,7 @@
         .map((s) => `<option value="${s}">${(STATUS_META[s] || {}).label ?? s}</option>`)
         .join('');
       el.editReasonField.hidden = !REASON_REQUIRED_STATUSES.has(el.editStatusSelect.value);
+      el.editFinalPriceField.hidden = el.editStatusSelect.value !== 'completed';
     }
 
     el.editStaffSelect.innerHTML =
@@ -942,18 +998,55 @@
       return;
     }
 
+    // 会計完了にする時は実際の会計金額を送る(「〜」付きメニューを含む予約は入力必須。サーバー側でも検証する)。
+    let finalPrice;
+    if (status === 'completed') {
+      const parsed = parseYenInput(el.editFinalPriceInput.value);
+      if (Number.isNaN(parsed)) {
+        showFormError(el.editStatusError, '会計金額は数字で入力してください。');
+        return;
+      }
+      if (parsed === null && editingReservation.price_is_from) {
+        showFormError(el.editStatusError, '「〜」付きのメニューを含む予約のため、実際の会計金額の入力が必要です。');
+        return;
+      }
+      if (parsed !== null) finalPrice = parsed;
+    }
+
     const submitBtn = el.editStatusForm.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
     try {
       await apiFetch('admin-reservations', `/${editingReservation.id}`, {
         method: 'PATCH',
-        body: { status, cancel_reason: reason || undefined },
+        body: { status, cancel_reason: reason || undefined, final_price: finalPrice },
       });
       showSaveStatus(el.editStatusSaveStatus, '変更しました', true);
       closeModal(el.editReservationModal);
       await refreshCurrentView();
     } catch (err) {
       showFormError(el.editStatusError, err.message);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  }
+
+  async function submitCheckout(e) {
+    e.preventDefault();
+    hideFormError(el.editCheckoutError);
+    const parsed = parseYenInput(el.editCheckoutInput.value);
+    if (parsed === null || Number.isNaN(parsed)) {
+      showFormError(el.editCheckoutError, '会計金額を数字で入力してください。');
+      return;
+    }
+    const submitBtn = el.editCheckoutForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      await apiFetch('admin-reservations', `/${editingReservation.id}`, { method: 'PATCH', body: { final_price: parsed } });
+      showSaveStatus(el.editCheckoutSaveStatus, '保存しました', true);
+      closeModal(el.editReservationModal);
+      await refreshCurrentView();
+    } catch (err) {
+      showFormError(el.editCheckoutError, err.message);
     } finally {
       submitBtn.disabled = false;
     }
@@ -1256,36 +1349,59 @@
 
   // メニューの削除は提供しない(reservations.menu_idが参照しているため物理削除は不可能。
   // staff/site_featuresと同じ考え方。掲載終了は「公開する」チェックを外す運用にする)。
-  function renderMenuCards(menus) {
-    if (!menus || menus.length === 0) {
-      el.menuCards.innerHTML = '<p class="status-text">メニューが登録されていません。</p>';
-      return;
-    }
-    el.menuCards.innerHTML = menus.map((m) => `
-      <div class="content-card" data-id="${m.id}">
-        <div class="field"><label>メニュー名</label><input type="text" class="f-name" value="${escapeHtml(m.name)}"></div>
-        <div class="field">
+  // 「非公開のメニュー」欄の開閉状態(loadMenus()の再読み込みで欄ごと作り直されても維持する)。
+  let inactiveMenusOpen = false;
+
+  function menuCardHtml(m) {
+    const categoryOption = (value, label) =>
+      `<option value="${value}" ${m.category === value ? 'selected' : ''}>${label}</option>`;
+    return `
+      <div class="content-card menu-card" data-id="${m.id}" data-active="${m.is_active ? '1' : '0'}">
+        <div class="field mc-name"><label>メニュー名</label><input type="text" class="f-name" value="${escapeHtml(m.name)}"></div>
+        <div class="field mc-category">
           <label>区分</label>
           <select class="f-category">
-            <option value="cut" ${m.category === 'cut' ? 'selected' : ''}>カット(1予約で1つまで)</option>
-            <option value="color" ${m.category === 'color' ? 'selected' : ''}>カラー(1予約で1つまで)</option>
-            <option value="perm" ${m.category === 'perm' ? 'selected' : ''}>パーマ(併用可)</option>
-            <option value="option" ${m.category === 'option' ? 'selected' : ''}>オプション(追加専用)</option>
+            ${categoryOption('cut', 'カット(1予約で1つまで)')}
+            ${categoryOption('color', 'カラー(1予約で1つまで)')}
+            ${categoryOption('perm', 'パーマ(併用可)')}
+            ${categoryOption('option', 'オプション(追加専用)')}
           </select>
         </div>
-        <div class="field"><label>価格(円・税込)</label><input type="text" inputmode="numeric" class="f-price" value="${m.price}"></div>
-        <div class="field"><label><input type="checkbox" class="f-price-from" ${m.price_is_from ? 'checked' : ''}> 「〜」付き(下限価格)</label></div>
-        <div class="field"><label>所要時間(分)</label><input type="text" inputmode="numeric" class="f-duration" value="${m.duration_minutes}"></div>
-        <div class="field"><label>説明文</label><input type="text" class="f-description" value="${escapeHtml(m.description ?? '')}"></div>
-        <div class="field"><label>表示順</label><input type="text" inputmode="numeric" class="f-sort" value="${m.sort_order}"></div>
-        <div class="field"><label><input type="checkbox" class="f-active" ${m.is_active ? 'checked' : ''}> 公開する(LP・予約画面に表示)</label></div>
+        <div class="field mc-price"><label>価格(円・税込)</label><input type="text" inputmode="numeric" class="f-price" value="${m.price}"></div>
+        <div class="field mc-duration"><label>所要(分)</label><input type="text" inputmode="numeric" class="f-duration" value="${m.duration_minutes}"></div>
+        <div class="field mc-sort"><label>表示順</label><input type="text" inputmode="numeric" class="f-sort" value="${m.sort_order}"></div>
+        <div class="field mc-description"><label>説明文</label><input type="text" class="f-description" value="${escapeHtml(m.description ?? '')}"></div>
+        <div class="field mc-from"><label><input type="checkbox" class="f-price-from" ${m.price_is_from ? 'checked' : ''}> 「〜」付き(下限価格)</label></div>
+        <div class="field mc-active"><label><input type="checkbox" class="f-active" ${m.is_active ? 'checked' : ''}> 公開する</label></div>
         <div class="content-card-actions">
           <button type="button" class="btn btn-primary btn-small save-btn">保存</button>
           <button type="button" class="btn btn-ghost btn-small delete-btn">削除</button>
           <span class="save-status"></span>
         </div>
       </div>
-    `).join('');
+    `;
+  }
+
+  function renderMenuCards(menus) {
+    if (!menus || menus.length === 0) {
+      el.menuCards.innerHTML = '<p class="status-text">メニューが登録されていません。</p>';
+      return;
+    }
+    // 公開中のメニューは通常表示、非公開のメニュー(旧セットメニュー等)は折りたたみ欄にまとめて一覧を短くする。
+    // 再描画(保存で公開/非公開が変わった時など)しても、折りたたみの開閉状態は維持する。
+    const wasInactiveOpen = inactiveMenusOpen;
+    const activeMenus = menus.filter((m) => m.is_active);
+    const inactiveMenus = menus.filter((m) => !m.is_active);
+    el.menuCards.innerHTML = activeMenus.map(menuCardHtml).join('') + (inactiveMenus.length > 0 ? `
+      <details class="menu-inactive-group"${wasInactiveOpen ? ' open' : ''}>
+        <summary>非公開のメニュー(${inactiveMenus.length}件)<span class="menu-inactive-hint">LP・予約画面には表示されていません</span></summary>
+        <div class="content-card-list">${inactiveMenus.map(menuCardHtml).join('')}</div>
+      </details>
+    ` : '');
+
+    el.menuCards.querySelector('.menu-inactive-group')?.addEventListener('toggle', (ev) => {
+      inactiveMenusOpen = ev.target.open;
+    });
 
     el.menuCards.querySelectorAll('.save-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -1306,6 +1422,12 @@
               is_active: card.querySelector('.f-active').checked,
             },
           });
+          const nowActive = card.querySelector('.f-active').checked;
+          if ((card.dataset.active === '1') !== nowActive) {
+            // 公開/非公開が変わった: 「非公開のメニュー」欄との間で移動させるため再描画する。
+            await loadMenus();
+            return;
+          }
           showSaveStatus(statusEl, '保存しました', true);
         } catch (err) {
           showSaveStatus(statusEl, `保存に失敗: ${err.message}`, false);
@@ -1543,7 +1665,7 @@
         ${escapeHtml(r.customer?.name ?? '(顧客不明)')}
         ${r.customer?.is_blocked ? '<span class="no-show-flag">要注意</span>' : ''}
       </div>
-      <div class="reservation-card-menu">${escapeHtml(r.menu_name ?? '')} ・ ${formatMenuPrice(r.price, r.price_is_from)}</div>
+      <div class="reservation-card-menu">${escapeHtml(r.menu_name ?? '')} ・ ${reservationPriceLabel(r)}</div>
       <div class="reservation-card-footer">
         <span class="status-pill ${meta.pill}">${meta.label}</span>
         <span class="source-tag">${SOURCE_LABEL[r.source] ?? r.source}</span>
@@ -2138,12 +2260,14 @@
     }
   }
 
-  function revenueBlockHtml(label, count, amount, isActual) {
+  // hasEstimate: 会計金額が未確定の「〜」付き予約(下限価格で計上)を含む。金額が下限であることを明記する。
+  function revenueBlockHtml(label, count, amount, isActual, hasEstimate) {
     return `
       <div class="revenue-block${isActual ? ' is-actual' : ''}">
         <p class="revenue-label">${escapeHtml(label)}</p>
-        <p class="revenue-amount">¥${yenFmt.format(amount)}</p>
+        <p class="revenue-amount">¥${yenFmt.format(amount)}${hasEstimate ? '〜' : ''}</p>
         <p class="revenue-count">${count}件</p>
+        ${hasEstimate ? '<p class="revenue-note">※「〜」付き予約を含むため、下限額で集計しています</p>' : ''}
       </div>
     `;
   }
@@ -2159,18 +2283,20 @@
       forecast_amount: acc.forecast_amount + s.forecast_amount,
       actual_count: acc.actual_count + s.actual_count,
       actual_amount: acc.actual_amount + s.actual_amount,
-    }), { forecast_count: 0, forecast_amount: 0, actual_count: 0, actual_amount: 0 });
+      forecast_has_estimate: acc.forecast_has_estimate || s.forecast_has_estimate,
+      actual_has_estimate: acc.actual_has_estimate || s.actual_has_estimate,
+    }), { forecast_count: 0, forecast_amount: 0, actual_count: 0, actual_amount: 0, forecast_has_estimate: false, actual_has_estimate: false });
 
     el.revenueTotal.innerHTML =
-      revenueBlockHtml('全体の見込み', total.forecast_count, total.forecast_amount, false) +
-      revenueBlockHtml('全体の実績', total.actual_count, total.actual_amount, true);
+      revenueBlockHtml('全体の見込み', total.forecast_count, total.forecast_amount, false, total.forecast_has_estimate) +
+      revenueBlockHtml('全体の実績', total.actual_count, total.actual_amount, true, total.actual_has_estimate);
 
     el.revenueArea.innerHTML = staffList.map((s) => `
       <div class="staff-column">
         <div class="staff-column-head"><h3>${escapeHtml(s.staff_name)}</h3></div>
         <div class="staff-column-body">
-          ${revenueBlockHtml('見込み', s.forecast_count, s.forecast_amount, false)}
-          ${revenueBlockHtml('実績', s.actual_count, s.actual_amount, true)}
+          ${revenueBlockHtml('見込み', s.forecast_count, s.forecast_amount, false, s.forecast_has_estimate)}
+          ${revenueBlockHtml('実績', s.actual_count, s.actual_amount, true, s.actual_has_estimate)}
         </div>
       </div>
     `).join('');

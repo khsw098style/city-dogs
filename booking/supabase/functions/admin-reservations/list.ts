@@ -39,7 +39,7 @@ export async function listReservations(url: URL, client: SupabaseClient, headers
   let query = client
     .from("reservations")
     .select(
-      "id, reservation_number, staff_id, menu_id, customer_id, status, source, time_range, price_at_booking, notes",
+      "id, reservation_number, staff_id, menu_id, customer_id, status, source, time_range, price_at_booking, final_price, notes",
       { count: "exact" },
     )
     .order("time_range", { ascending: false })
@@ -90,6 +90,7 @@ export async function listReservations(url: URL, client: SupabaseClient, headers
       start_at: range.start.toISOString(),
       end_at: range.end.toISOString(),
       price: r.price_at_booking,
+      final_price: r.final_price,
       notes: r.notes,
       staff_id: r.staff_id ?? null,
       staff_name: r.staff_id ? staffNameById.get(r.staff_id as string) ?? null : null,

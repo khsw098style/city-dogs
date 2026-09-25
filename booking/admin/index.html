@@ -166,6 +166,9 @@
       </form>
 
       <h2 class="content-heading" id="content-features">CONCEPT(特徴カード)</h2>
+      <p class="content-note">
+        LPの「CONCEPT」に並ぶ特徴カードです。<strong>推奨は3〜6枚</strong>です。PCでは3列で表示されるので、3枚か6枚がいちばんきれいに並びます。増やしすぎるとスマホでは縦に長くなり、いちばん伝えたい特徴が埋もれてしまいます。表示順の小さい順に並びます。
+      </p>
       <div id="featureCards" class="content-card-list">
         <p class="status-text">読み込み中…</p>
       </div>
@@ -180,6 +183,9 @@
       </details>
 
       <h2 class="content-heading" id="content-gallery">SHOP &amp; STYLE(写真)</h2>
+      <p class="content-note">
+        「店内メイン写真」はLPに1枚だけ表示されます(表示順が最も小さい1枚)。「スタイル例」は<strong>推奨3〜6枚</strong>です。PCでは3列、タブレットでは2列、スマホでは1列に並ぶので、6枚がどの画面でもいちばんきれいです(4枚・5枚だと最後の行が余ります)。画像は1枚5MBまで(JPEG・PNG・WebP・GIF)です。
+      </p>
       <div id="galleryCards" class="content-card-list">
         <p class="status-text">読み込み中…</p>
       </div>
@@ -206,7 +212,7 @@
 
       <h2 class="content-heading" id="content-menus">MENU &amp; PRICE(メニュー・料金)</h2>
       <p class="content-note">
-        過去に予約で使われたことのあるメニューは削除できません(削除ボタンを押すとエラーになります)。その場合は掲載を終了する形で「公開する」のチェックを外してください。一度も使われていないメニュー(登録ミスなど)は削除できます。
+        過去に予約で使われたことのあるメニューは削除できません(削除ボタンを押すとエラーになります)。その場合は掲載を終了する形で「公開する」のチェックを外して保存してください。非公開にしたメニューは、この一覧の下にある「非公開のメニュー」の折りたたみ欄に移動します(LP・予約画面には表示されません。再び公開したい時は、その欄を開いて「公開する」にチェックを入れ直せば元の一覧に戻ります)。一度も使われていないメニュー(登録ミスなど)は削除できます。
       </p>
       <p class="content-note">
         メニューは「区分」(カット/カラー/パーマ/オプション)ごとに登録します。お客様は予約画面で、カット・カラー・パーマから主メニューを選び、
@@ -405,9 +411,30 @@
             <label for="editReasonInput">理由(必須)</label>
             <input type="text" id="editReasonInput" placeholder="例: お客様都合によりキャンセル">
           </div>
+          <div class="field" id="editFinalPriceField" hidden>
+            <label for="editFinalPriceInput">実際の会計金額(円・税込)<span id="editFinalPriceRequired"></span></label>
+            <input type="text" id="editFinalPriceInput" inputmode="numeric" placeholder="例: 12000" autocomplete="off">
+            <p class="content-note" id="editFinalPriceHint"></p>
+          </div>
           <div class="content-card-actions">
             <button type="submit" class="btn btn-primary btn-small">ステータスを変更</button>
             <span class="save-status" id="editStatusSaveStatus"></span>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-section" id="editCheckoutSection" hidden>
+        <h3>会計金額</h3>
+        <p class="form-error" id="editCheckoutError" hidden></p>
+        <form id="editCheckoutForm">
+          <div class="field">
+            <label for="editCheckoutInput">実際の会計金額(円・税込)</label>
+            <input type="text" id="editCheckoutInput" inputmode="numeric" placeholder="例: 12000" autocomplete="off">
+            <p class="content-note" id="editCheckoutHint"></p>
+          </div>
+          <div class="content-card-actions">
+            <button type="submit" class="btn btn-primary btn-small">会計金額を保存</button>
+            <span class="save-status" id="editCheckoutSaveStatus"></span>
           </div>
         </form>
       </div>

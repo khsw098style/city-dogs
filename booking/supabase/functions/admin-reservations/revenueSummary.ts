@@ -36,11 +36,20 @@ export async function getRevenueSummary(url: URL, client: SupabaseClient, header
 
   const { data: reservations, error: resErr } = await client
     .from("reservations")
-    .select("staff_id, status, price_at_booking")
+    .select("staff_id, status, price_at_booking, final_price, reservation_items(price_is_from)")
     .filter("time_range", "ov", `[${monthStart.toISOString()},${monthEnd.toISOString()})`);
   if (resErr) throw new ApiError("INTERNAL_ERROR", "予約情報の取得に失敗しました。");
 
-  const summary = aggregateRevenueByStaff(staffList ?? [], reservations ?? []);
+  const summary = aggregateRevenueByStaff(
+    staffList ?? [],
+    (reservations ?? []).map((r) => ({
+      staff_id: r.staff_id as string,
+      status: r.status as string,
+      price_at_booking: r.price_at_booking as number,
+      final_price: r.final_price as number | null,
+      has_estimated_price: ((r.reservation_items ?? []) as { price_is_from: boolean }[]).some((i) => i.price_is_from),
+    })),
+  );
 
   return jsonResponse({ year, month, staff: summary }, { headers });
 }

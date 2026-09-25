@@ -43,7 +43,7 @@ export async function getSchedule(url: URL, client: SupabaseClient, headers: Hea
 
   const { data: reservations, error: resErr } = await client
     .from("reservations")
-    .select("id, reservation_number, staff_id, status, source, time_range, price_at_booking, notes, customer_id, menu_id")
+    .select("id, reservation_number, staff_id, status, source, time_range, price_at_booking, final_price, notes, customer_id, menu_id")
     .in("staff_id", staffIds.length > 0 ? staffIds : [noMatchId])
     .filter("time_range", "ov", `[${dayStart},${dayEnd})`)
     .order("time_range", { ascending: true });
@@ -82,6 +82,7 @@ export async function getSchedule(url: URL, client: SupabaseClient, headers: Hea
       start_at: range.start.toISOString(),
       end_at: range.end.toISOString(),
       price: r.price_at_booking,
+      final_price: r.final_price,
       menu_id: r.menu_id,
       notes: r.notes,
       // 複数メニュー選択の予約は連結名(「カット + パーマ」)。内訳のない古い予約は主メニュー名にフォールバック。

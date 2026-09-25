@@ -8,6 +8,7 @@
 //   npx playwright install chromium  (初回のみ)
 //   node tests/site-content.e2e.mjs
 
+// ⚠️ このテストの確認内容を変えたら、リポジトリ直下の TESTING.md(何をどの順で確認しているかの一覧)も同じ変更で更新すること。
 import { chromium } from 'playwright';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';

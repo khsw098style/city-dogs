@@ -55,7 +55,7 @@ export async function getCustomer(id: string, client: SupabaseClient, headers: H
 
   const { data: reservations, error: resErr } = await client
     .from("reservations")
-    .select("id, reservation_number, status, source, time_range, price_at_booking")
+    .select("id, reservation_number, status, source, time_range, price_at_booking, final_price")
     .eq("customer_id", id)
     .order("time_range", { ascending: false })
     .limit(20);
@@ -70,7 +70,8 @@ export async function getCustomer(id: string, client: SupabaseClient, headers: H
       source: r.source,
       start_at: range.start.toISOString(),
       end_at: range.end.toISOString(),
-      price: r.price_at_booking,
+      // 会計金額が確定していればそれを(実際に支払われた金額)、未入力なら予約時点の金額を表示する。
+      price: r.final_price ?? r.price_at_booking,
     };
   });
 
