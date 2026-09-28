@@ -2,6 +2,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ApiError } from "./http.ts";
 import { parseTstzRange } from "./range.ts";
 import { loadMenuSelection, type MenuSelection } from "./menuSelection.ts";
+import { NON_BOOKABLE_ROLES } from "./staffRoles.ts";
 
 // GET /availability と POST /reservations(サーバー側の再検証)の両方から呼ばれる、
 // 空き枠計算の唯一の実装。api-design.mdの「GET /availability」節のロジックに対応する。
@@ -230,7 +231,7 @@ async function fetchStaff(client: SupabaseClient, staffId: string): Promise<Staf
     .from("staff")
     .select("id, name")
     .eq("is_active", true)
-    .neq("role", "assistant")
+    .not("role", "in", NON_BOOKABLE_ROLES)
     .eq("id", staffId)
     .order("display_order", { ascending: true });
 

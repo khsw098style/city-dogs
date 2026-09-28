@@ -21,7 +21,7 @@
 ## 2. 店舗固有ファイルの書き換え(`🏪 店舗固有` コメント参照)
 
 - [ ] `lp/js/config.js` の `SUPABASE_URL` / `ANON_KEY` を新プロジェクトの値に書き換え。`TURNSTILE_SITE_KEY`もCloudflareダッシュボード(Turnstile → Add widget)で発行した本番用サイトキーに差し替え(テスト用キー`1x00000000000000000000AA`のままでは公開後も検証が常に成功してしまい、ボット対策として機能しない)。Hostname Managementには**本番ドメインと`localhost`の両方**を登録すること(`localhost`が無いとローカルE2Eテストが後述の理由でタイムアウトする)
-- [ ] `booking/admin/js/config.js` の `SUPABASE_URL` / `ANON_KEY` を新プロジェクトの値に書き換え
+- [ ] `booking/admin/js/config.js` の `SUPABASE_URL` / `ANON_KEY` を新プロジェクトの値に書き換え。あわせて`ENABLED_TABS`で、その店舗で使わない管理画面のタブ(顧客管理・売上予定実績など)を`false`にする(`false`のタブは表示されない。最低1つは`true`にすること)
 - [ ] `booking/supabase/seed.sql` を新店舗のメニュー・スタッフ名・営業時間(定休日パターン含む)に書き換える
 - [ ] 書き換えた seed.sql を投入: `npx supabase db push --include-seed`(反映されない場合は `npx supabase db query --linked -f supabase/seed.sql` で直接実行。過去に前者だけでは反映されないことがあった)
 - [ ] `lp/index.html`・`lp/reserve.html`・`lp/manage.html` の `<title>`・meta description・店舗名・電話番号・Instagramリンク・地図の座標(Googleマップ埋め込みURL)・footerを新店舗の情報に書き換え(3ファイルとも同じ店舗名がそれぞれ埋め込まれている)
@@ -41,6 +41,7 @@
 - [ ] Supabaseダッシュボード(Authentication > Users > Add user)でオーナー/スタッフのログインアカウントを作成(「Auto Confirm User」を有効にする)
 - [ ] 管理画面(`booking/admin/`)の「LPコンテンツ」タブ、またはSQL Editorから新店舗のスタッフ行を作成
 - [ ] 作成したAuthアカウントの`auth_user_id`を該当staff行に紐付け: `update staff set auth_user_id = '<auth_user_id>' where name = '<スタッフ名>';`
+- [ ] (任意)保守用の閲覧専用アカウントを作る場合: Authユーザーを作成 → `insert into staff (name, role, is_active, auth_user_id, display_order) values ('保守用', 'maintainer', true, '<auth_user_id>', 999);`(`is_active = true`でないとログインできない。店舗側の一覧・LPには出ず、書き込みAPIは403になる)。**オーナーには事前に「調査目的の閲覧のみで、変更はできない」と説明すること**(顧客情報は閲覧できるため)
 
 ## 5. Secrets(`npx supabase secrets set ...`)
 

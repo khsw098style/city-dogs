@@ -10,4 +10,17 @@ window.CITY_DOGS_CONFIG = {
   // このドメイン(city-dogs-admin-deploy.khs-w098style.workers.dev)をCloudflareのHostname
   // Managementに追加登録しないとウィジェットが表示されないので、本番反映時は要確認。
   TURNSTILE_SITE_KEY: '0x4AAAAAAE4sxhHQSTp5lim6',
+  // 店舗によっては不要なタブがあるため(例: 顧客管理・売上予定実績を使わない店舗)、
+  // 納品前にここでfalseにすればそのタブ自体を非表示にできる(オーナー自身は変更しない、
+  // 開発者がこのファイルを直接編集して納品する運用。キー未指定時はtrue扱い)。
+  ENABLED_TABS: {
+    schedule: true,
+    search: true,
+    content: true,
+    shifts: true,
+    customers: true,
+    revenue: true,
+  },
+  // 予約検索タブの1ページあたりの表示件数(未指定・不正な値は30。APIの上限は200)。
+  SEARCH_PAGE_SIZE: 30,
 };

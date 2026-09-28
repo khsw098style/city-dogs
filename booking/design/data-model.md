@@ -101,7 +101,7 @@ erDiagram
 ### staff(スタッフ)
 現状は當眞さん(stylist)+アシスタント1名+オーナー、程度の想定。`role` は権限分けというより表示上の分類。
 
-`name_en`/`bio_role_label`/`bio_comment`/`avatar_image_url`(2026-09-13追加)はLPの「STAFF」セクション表示専用のカラム。`role`(enum: owner/stylist/assistant、予約可否など業務ロジックで使う権限区分)と、`bio_role_label`(例: 「スタイリスト / 理容歴4年」というLP表示用の肩書きテキスト)を意図的に別カラムにしている。理由は「7.」の`manage_token`と同じ考え方で、「権限区分」と「表示上の肩書き」という別概念を1カラムに混在させないため。`avatar_image_url`は`null`可で、未設定時はLP側で現行のSVGプレースホルダーアイコンを表示する(既存の見た目を壊さない)。
+`name_en`/`bio_role_label`/`bio_comment`/`avatar_image_url`(2026-09-13追加)はLPの「STAFF」セクション表示専用のカラム。`role`(enum: owner/stylist/assistant/maintainer、予約可否など業務ロジックで使う権限区分。`maintainer`は2026-09-28追加の保守用アカウントで、店舗スタッフではなく閲覧専用。店舗側の一覧・LP・集計には出さず、管理APIの書き込みは拒否する。0014マイグレーション参照)と、`bio_role_label`(例: 「スタイリスト / 理容歴4年」というLP表示用の肩書きテキスト)を意図的に別カラムにしている。理由は「7.」の`manage_token`と同じ考え方で、「権限区分」と「表示上の肩書き」という別概念を1カラムに混在させないため。`avatar_image_url`は`null`可で、未設定時はLP側で現行のSVGプレースホルダーアイコンを表示する(既存の見た目を壊さない)。
 
 ### menus(メニュー)
 2026-09-24に`category`(cut/color/perm/option)と`price_is_from`(「¥4,500〜」のような下限価格の印)を追加し、カット・カラー・パーマ・オプションの10メニュー構成にした(0012マイグレーション)。旧4メニュー(HotPepper掲載の複合メニュー)は`is_active=false`で温存。`duration_minutes` を持たせることで、予約の枠を可変長で確保できるようにしている(すべて30分刻み、のような決め打ちにしない)。LPの「MENU & PRICE」セクションが表示するデータそのものなので、追加のテーブルは不要(既存の`name`/`price`/`description`/`sort_order`/`is_active`をそのままLP表示に流用する)。

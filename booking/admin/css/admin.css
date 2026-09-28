@@ -179,6 +179,15 @@ input[type="date"] { -webkit-appearance: none; appearance: none; }
 /* ---------- App shell ---------- */
 .app-screen { min-height: 100vh; }
 
+/* ヘッダー(ロゴ行)とタブバーをひとまとめにして、どのタブでもスクロールしても常に表示する。
+   下の追従ナビ(.date-nav/.content-subnav)はこの高さ(--app-top-h、JSが実測してセット)の下に付く。 */
+.app-top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg);
+}
+
 .app-header {
   display: flex;
   justify-content: space-between;
@@ -260,7 +269,7 @@ input[type="date"] { -webkit-appearance: none; appearance: none; }
    同じ考え方でスティッキーにする(2026-09-18、営業日・シフトタブでのフィードバックを受けて対応)。 */
 .date-nav {
   position: sticky;
-  top: 0;
+  top: var(--app-top-h, 0px);
   z-index: 5;
   display: flex;
   align-items: center;
@@ -418,7 +427,12 @@ input[type="date"] { -webkit-appearance: none; appearance: none; }
 .search-submit { display: flex; align-items: flex-end; }
 .search-submit .btn { width: 100%; }
 
-.search-result-meta { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.8rem; }
+.search-result-meta { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.8rem; scroll-margin-top: calc(var(--app-top-h, 0px) + 0.5rem); }
+
+.search-pager { display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 1rem; }
+.search-pager:empty { display: none; }
+.search-pager .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.search-pager-status { font-size: 0.85rem; color: var(--muted); }
 
 .search-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
 table.search-table {
@@ -456,12 +470,12 @@ table.search-table tr:last-child td { border-bottom: none; }
 .content-heading {
   font-size: 0.95rem;
   margin: 1.8rem 0 0.8rem;
-  scroll-margin-top: 3.6rem;
+  scroll-margin-top: calc(var(--app-top-h, 0px) + 3.6rem);
 }
 
 .content-subnav {
   position: sticky;
-  top: 0;
+  top: var(--app-top-h, 0px);
   z-index: 5;
   display: flex;
   gap: 1.4rem;
@@ -773,6 +787,7 @@ summary.add-form-label::before {
 .detail-list dd { margin: 0; font-weight: 700; }
 
 @media (max-width: 640px) {
+  .app-top { position: static; }
   .app-header { flex-direction: column; align-items: flex-start; gap: 0.6rem; }
   .date-nav { flex-wrap: wrap; }
   .modal-backdrop { padding: 0; align-items: stretch; }

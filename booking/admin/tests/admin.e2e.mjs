@@ -281,7 +281,7 @@ async function run() {
     // 復元(null固定ではなく)を徹底することで再発を防ぐ。
     const { data: staffRowResult, error: staffFindErr } = await admin
       .from('staff')
-      .select('id, name, auth_user_id')
+      .select('id, name, role, auth_user_id')
       .eq('name', TEST_STAFF_NAME)
       .single();
     if (staffFindErr) throw staffFindErr;
@@ -348,13 +348,61 @@ async function run() {
     await page.waitForTimeout(1000);
     await page.screenshot({ path: path.join(shotDir, 'schedule.png'), fullPage: true });
 
-    console.log('4. 検索タブ...');
+    console.log('4. 検索タブ(初期表示=本日以降・日付条件・ページング)...');
+    const getAccessToken = () => page.evaluate(() => {
+      const key = Object.keys(localStorage).find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
+      return key ? JSON.parse(localStorage.getItem(key)).access_token : null;
+    });
     await page.click('.tab-btn[data-tab="search"]');
+    // 初めて開いた時は、来店日(from)が本日になり、条件なしの全件ではなく「本日以降」が自動で検索される。
+    await page.waitForFunction(() => document.getElementById('searchResultMeta').textContent.length > 0, { timeout: 15000 });
+    const todayStr = formatDateLocal(new Date());
+    const initialFrom = await page.inputValue('#searchDateFrom');
+    if (initialFrom !== todayStr) {
+      throw new Error(`予約検索の来店日(from)の初期値が本日(${todayStr})ではありません: "${initialFrom}"`);
+    }
     await page.click('#searchForm button[type="submit"]');
     await page.waitForTimeout(1000);
     await page.screenshot({ path: path.join(shotDir, 'search.png'), fullPage: true });
     const metaText = await page.locator('#searchResultMeta').innerText();
     console.log('   検索結果:', metaText);
+
+    // API側の確認: 日付条件は片側だけでも効く(fromのみ=以降すべて/toのみ=以前すべて)。
+    // 「本日以降」+「昨日以前」=全件になれば、どちらも取りこぼし・重複がない。
+    const token = await getAccessToken();
+    if (!token) throw new Error('ログイン済みセッションのアクセストークンが取得できませんでした。');
+    const listReservations = async (query) => {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-reservations?${query}`, {
+        headers: { Authorization: `Bearer ${token}`, apikey: ANON_KEY },
+      });
+      return { status: res.status, body: await res.json() };
+    };
+    const yesterdayStr = formatDateLocal(addDaysLocal(new Date(), -1));
+    const allList = await listReservations('limit=1');
+    const upcomingList = await listReservations(`date_from=${todayStr}&limit=1`);
+    const pastList = await listReservations(`date_to=${yesterdayStr}&limit=1`);
+    if (upcomingList.body.total + pastList.body.total !== allList.body.total) {
+      throw new Error(`本日以降(${upcomingList.body.total})+昨日以前(${pastList.body.total})が全件(${allList.body.total})と一致しません。`);
+    }
+    // ページング: offsetで送った次のページは、前のページと重複せず、全件数(total)も変わらない。
+    // 並び順: sort=ascは来店日時の早い順、既定(sort省略)は新しい順。
+    if (allList.body.total >= 2) {
+      const page0 = await listReservations('limit=1&offset=0');
+      const page1 = await listReservations('limit=1&offset=1');
+      if (page0.body.reservations[0].id === page1.body.reservations[0].id || page0.body.total !== page1.body.total) {
+        throw new Error('offsetでページを送ると、同じ予約が重複するか、合計件数が変わってしまいます。');
+      }
+      const ascFirst = (await listReservations('sort=asc&limit=1')).body.reservations[0].start_at;
+      const descFirst = page0.body.reservations[0].start_at;
+      if (!(ascFirst <= descFirst)) {
+        throw new Error(`sort=ascの先頭(${ascFirst})が新しい順の先頭(${descFirst})より後になっています。`);
+      }
+    }
+    const badDate = await listReservations('date_from=abc');
+    if (badDate.status !== 400 || badDate.body.error?.code !== 'VALIDATION_ERROR') {
+      throw new Error(`不正な日付がVALIDATION_ERRORにならず、status=${badDate.status}でした。`);
+    }
+    console.log(`   全${allList.body.total}件 = 本日以降${upcomingList.body.total}件 + 昨日以前${pastList.body.total}件、ページ送り・並び順・不正日付の拒否を確認`);
 
     console.log('5. LPコンテンツタブへ切り替え...');
     await page.click('.tab-btn[data-tab="content"]');
@@ -809,6 +857,68 @@ async function run() {
       throw new Error(`代理予約作成後の月次見込み件数が0件のままです(表示="${forecastCountText}")。`);
     }
     console.log('   売上予定・実績タブの表示、および代理予約が見込み件数に反映されることを確認');
+
+    console.log('16. 保守用ロール(maintainer): 閲覧のみ可・書き込みは拒否・店舗側の一覧に出ないことを確認...');
+    // ログイン済みのテスト用スタッフのroleを一時的にmaintainerに変え、同じセッション(JWT)で
+    // APIを直接叩く。roleはリクエストごとにDBから読まれるため、再ログイン不要で即座に反映される。
+    // 元のroleはfinallyで必ず復元する(staffRow.roleに保存済み)。
+    await admin.from('staff').update({ role: 'maintainer' }).eq('id', staffRow.id);
+    const accessToken = await getAccessToken();
+    if (!accessToken) throw new Error('ログイン済みセッションのアクセストークンが取得できませんでした。');
+    const callFn = (method, pathAndQuery) => fetch(`${SUPABASE_URL}/functions/v1/${pathAndQuery}`, {
+      method,
+      headers: { Authorization: `Bearer ${accessToken}`, apikey: ANON_KEY, 'Content-Type': 'application/json' },
+      body: method === 'GET' ? undefined : '{}',
+    });
+    const NO_SUCH_ID = '00000000-0000-4000-8000-000000000000';
+
+    // 閲覧(GET)は許可される。スケジュールの列(staff)には保守用アカウント自身が出てこない。
+    const scheduleRes = await callFn('GET', `admin-reservations/schedule?date=${formatDateLocal(new Date())}`);
+    if (scheduleRes.status !== 200) {
+      throw new Error(`maintainerでGETが拒否されました(status=${scheduleRes.status})。閲覧は許可される仕様です。`);
+    }
+    const scheduleBody = await scheduleRes.json();
+    if (scheduleBody.staff.some((s) => s.id === staffRow.id)) {
+      throw new Error('スケジュールの列に保守用アカウントが表示されています。');
+    }
+
+    // 書き込み(DELETE/PATCH/PUT)は403 FORBIDDEN。存在しないIDを指定しているので、
+    // もし拒否されなくても実データは変わらない(拒否されない場合は404/400になるため区別できる)。
+    for (const [method, target] of [
+      ['DELETE', `admin-menus/${NO_SUCH_ID}`],
+      ['PATCH', `admin-reservations/${NO_SUCH_ID}`],
+      ['PUT', 'admin-site-content/rating'],
+    ]) {
+      const res = await callFn(method, target);
+      const body = await res.json().catch(() => null);
+      if (res.status !== 403 || body?.error?.code !== 'FORBIDDEN') {
+        throw new Error(`maintainerの${method} ${target}が403 FORBIDDENになりませんでした(status=${res.status}, body=${JSON.stringify(body)})。`);
+      }
+    }
+
+    // 店舗側の画面・公開APIには出ない(LPのスタッフ紹介、指名リスト、LPコンテンツタブのスタッフ一覧)。
+    const contentStaffRes = await callFn('GET', 'admin-site-content/staff');
+    const contentStaffBody = await contentStaffRes.json();
+    if (contentStaffRes.status !== 200 || contentStaffBody.staff.some((s) => s.id === staffRow.id)) {
+      throw new Error('LPコンテンツタブのスタッフ一覧に保守用アカウントが表示されています。');
+    }
+    const publicHeaders = { Authorization: `Bearer ${ANON_KEY}`, apikey: ANON_KEY };
+    const publicStaffBody = await (await fetch(`${SUPABASE_URL}/functions/v1/staff`, { headers: publicHeaders })).json();
+    if (publicStaffBody.staff.some((s) => s.id === staffRow.id)) {
+      throw new Error('公開の指名リスト(GET /staff)に保守用アカウントが表示されています。');
+    }
+    const siteContentBody = await (await fetch(`${SUPABASE_URL}/functions/v1/site-content`, { headers: publicHeaders })).json();
+    if (siteContentBody.staff.some((s) => s.name === staffRow.name)) {
+      throw new Error('LPのスタッフ紹介(GET /site-content)に保守用アカウントが表示されています。');
+    }
+
+    // roleを元に戻したら、書き込みが再び通ることも確認する(拒否がroleだけに依存している確認)。
+    await admin.from('staff').update({ role: staffRow.role }).eq('id', staffRow.id);
+    const restoredRes = await callFn('DELETE', `admin-menus/${NO_SUCH_ID}`);
+    if (restoredRes.status !== 404) {
+      throw new Error(`roleを元に戻した後のDELETEが404になりませんでした(status=${restoredRes.status})。`);
+    }
+    console.log('   maintainerは閲覧のみ可・書き込みは403・店舗側の一覧(スケジュール/LPコンテンツ/指名リスト/LP紹介)に出ないことを確認');
   } finally {
     // 途中で例外が起きて finally に来た場合でも、ブラウザ側のコンソールエラー・
     // 未捕捉例外(pageerror)は原因調査に重要な手がかりになるため、成功/失敗を問わず
@@ -830,7 +940,7 @@ async function run() {
     if (server) server.kill();
     killByPort(PORT);
 
-    console.log('16. 後片付け(LPコンテンツのテストデータ・評価バッジ・テストユーザーの紐付け解除・削除)...');
+    console.log('17. 後片付け(LPコンテンツのテストデータ・評価バッジ・テストユーザーの紐付け解除・削除)...');
     // 電話予約の代理登録で作った予約(reservations)は片付けない(テストデータは
     // 納品前に一括クリアする運用のため、lp/tests/reserve.e2e.mjsと同じ方針)。
     // 特徴カード/写真はUI経由の削除テストで既に消えているはずだが、途中で失敗した場合の
@@ -846,8 +956,9 @@ async function run() {
     }
     if (staffRow) {
       // null固定ではなく、テスト実行前に読み取った値に戻す(実アカウントが
-      // 紐付いていた場合はそれを保護するため)。
-      await admin.from('staff').update({ auth_user_id: previousAuthUserId }).eq('id', staffRow.id);
+      // 紐付いていた場合はそれを保護するため)。手順16でroleをmaintainerに変えたまま
+      // 失敗した場合に備え、roleも実行前の値に戻す。
+      await admin.from('staff').update({ auth_user_id: previousAuthUserId, role: staffRow.role }).eq('id', staffRow.id);
     }
     if (created) {
       await admin.auth.admin.deleteUser(created.user.id);

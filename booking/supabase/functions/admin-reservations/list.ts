@@ -8,8 +8,10 @@ const PAGE_SIZE_DEFAULT = 50;
 const PAGE_SIZE_MAX = 200;
 const JST_OFFSET = "+09:00";
 
-// GET /admin/reservations?date=&date_from=&date_to=&status=&reservation_number=&phone=&customer_name=&limit=&offset=
+// GET /admin/reservations?date=&date_from=&date_to=&status=&reservation_number=&phone=&customer_name=&sort=&limit=&offset=
 // 予約の検索・一覧(SALON BOARDの「予約一覧」画面相当)。
+// sort=asc で来店日時の早い順、省略/それ以外は新しい順(既定)。同じ日時の予約はidで順序を固定する
+// (固定しないとoffsetでページを送った時に、同時刻の予約が前後のページに重複・欠落することがある)。
 export async function listReservations(url: URL, client: SupabaseClient, headers: HeadersInit) {
   const params = url.searchParams;
   const singleDate = params.get("date");
@@ -19,6 +21,7 @@ export async function listReservations(url: URL, client: SupabaseClient, headers
   const reservationNumber = params.get("reservation_number");
   const phone = params.get("phone");
   const customerName = params.get("customer_name");
+  const ascending = params.get("sort") === "asc";
   const limit = Math.min(Math.max(Number(params.get("limit")) || PAGE_SIZE_DEFAULT, 1), PAGE_SIZE_MAX);
   const offset = Math.max(Number(params.get("offset")) || 0, 0);
 
@@ -42,19 +45,32 @@ export async function listReservations(url: URL, client: SupabaseClient, headers
       "id, reservation_number, staff_id, menu_id, customer_id, status, source, time_range, price_at_booking, final_price, notes",
       { count: "exact" },
     )
-    .order("time_range", { ascending: false })
+    .order("time_range", { ascending })
+    .order("id", { ascending })
     .range(offset, offset + limit - 1);
 
   if (reservationNumber) query = query.eq("reservation_number", reservationNumber);
   if (statusParam) query = query.in("status", statusParam.split(",").map((s) => s.trim()).filter(Boolean));
   if (customerIdFilter) query = query.in("customer_id", customerIdFilter);
 
-  if (dateFrom) {
-    const from = `${dateFrom}T00:00:00${JST_OFFSET}`;
-    const toBase = dateTo ?? dateFrom;
-    const toDate = new Date(`${toBase}T00:00:00${JST_OFFSET}`);
-    toDate.setDate(toDate.getDate() + 1); // to側は「その日を含む」ので翌日0時を上限にする
-    query = query.filter("time_range", "ov", `[${from},${toDate.toISOString()})`);
+  // date_from のみ=その日以降すべて、date_to のみ=その日以前すべて、両方=その範囲、date=その1日。
+  // (以前は date_from だけだと「その1日だけ」になり、date_to のみは無視されていた)
+  if (dateFrom || dateTo) {
+    // 不正な日付は toISOString() が例外(500)になるため、入口で弾く。
+    for (const d of [dateFrom, dateTo]) {
+      if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+        throw new ApiError("VALIDATION_ERROR", "日付は YYYY-MM-DD 形式で指定してください。");
+      }
+    }
+    const lower = dateFrom ? `${dateFrom}T00:00:00${JST_OFFSET}` : "";
+    let upper = "";
+    if (dateTo) {
+      const toDate = new Date(`${dateTo}T00:00:00${JST_OFFSET}`);
+      toDate.setDate(toDate.getDate() + 1); // to側は「その日を含む」ので翌日0時を上限にする
+      upper = toDate.toISOString();
+    }
+    // 空の境界はtstzrangeでは無限(unbounded)を意味する。
+    query = query.filter("time_range", "ov", `${dateFrom ? "[" : "("}${lower},${upper})`);
   }
 
   const { data: reservations, error, count } = await query;

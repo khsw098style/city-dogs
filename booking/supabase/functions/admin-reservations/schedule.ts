@@ -2,6 +2,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ApiError, jsonResponse } from "../_shared/http.ts";
 import { parseTstzRange } from "../_shared/range.ts";
 import { loadReservationMenuLabels } from "../_shared/menuSelection.ts";
+import { MAINTAINER_ROLE } from "../_shared/staffRoles.ts";
 
 const JST_OFFSET = "+09:00";
 
@@ -24,6 +25,7 @@ export async function getSchedule(url: URL, client: SupabaseClient, headers: Hea
     .from("staff")
     .select("id, name, role")
     .eq("is_active", true)
+    .neq("role", MAINTAINER_ROLE)
     .order("display_order", { ascending: true });
   if (staffErr) throw new ApiError("INTERNAL_ERROR", "スタッフ情報の取得に失敗しました。");
 

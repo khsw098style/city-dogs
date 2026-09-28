@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ApiError, jsonResponse } from "../_shared/http.ts";
 import { aggregateRevenueByStaff } from "../_shared/revenue.ts";
+import { NON_BOOKABLE_ROLES } from "../_shared/staffRoles.ts";
 
 // GET /admin-reservations/revenue-summary?year=YYYY&month=MM
 // スタイリストごとの月次売上(見込み・実績)を返す。定義は_shared/revenue.tsのコメント参照。
@@ -30,7 +31,7 @@ export async function getRevenueSummary(url: URL, client: SupabaseClient, header
     .from("staff")
     .select("id, name")
     .eq("is_active", true)
-    .neq("role", "assistant")
+    .not("role", "in", NON_BOOKABLE_ROLES)
     .order("display_order", { ascending: true });
   if (staffErr) throw new ApiError("INTERNAL_ERROR", "スタッフ情報の取得に失敗しました。");
 

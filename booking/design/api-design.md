@@ -18,7 +18,7 @@
 | Method | Path | 説明 |
 |---|---|---|
 | GET | `/menus` | 有効なメニュー一覧(LPの「MENU & PRICE」表示にもそのまま使う) |
-| GET | `/staff` | 指名可能なスタッフ一覧(`role != 'assistant'`かつ稼働中)。予約UIのリストボックス用。**LPの「STAFF」紹介セクションとは別エンドポイント**(下記`/site-content`参照。予約用途と紹介用途を混同しない) |
+| GET | `/staff` | 指名可能なスタッフ一覧(`role`が`assistant`/`maintainer`でなく、かつ稼働中)。予約UIのリストボックス用。**LPの「STAFF」紹介セクションとは別エンドポイント**(下記`/site-content`参照。予約用途と紹介用途を混同しない) |
 | GET | `/site-content` | LPの「CONCEPT」「SHOP & STYLE」「STAFF」セクションと評価バッジ(★スコア・口コミ件数)用の表示データを1回で返す(2026-09-13実装・デプロイ済み、評価バッジは2026-09-17追加) |
 | GET | `/availability` | 指定日・メニュー(・任意でスタイリスト指名)の空き枠一覧 |
 | POST | `/reservations` | Web予約の新規作成。`customer.email`必須(確認・変更・キャンセル用リンクの送信先) |
@@ -30,7 +30,7 @@
 | Method | Path | 説明 | SALON BOARD対応画面 | 実装状況 |
 |---|---|---|---|---|
 | GET | `/admin/reservations/schedule` | 日付×スタッフのスケジュール表示 | スケジュール | ✅実装・デプロイ・テスト済み |
-| GET | `/admin/reservations` | 予約の検索・一覧(ステータス/顧客名/電話番号/予約番号/日付範囲でフィルタ) | 予約一覧 | ✅実装・デプロイ・テスト済み |
+| GET | `/admin/reservations` | 予約の検索・一覧(ステータス/顧客名/電話番号/予約番号/日付範囲でフィルタ)。`limit`(既定50・最大200)/`offset`でページング、`total`は全件数。`sort=asc`で来店日時の早い順(省略時は新しい順)。日付は`date`(その1日)/`date_from`のみ(その日以降すべて)/`date_to`のみ(その日以前すべて)/両方(範囲)、不正な形式は400(2026-09-28に片側指定を修正) | 予約一覧 | ✅実装・デプロイ・テスト済み |
 | POST | `/admin/reservations` | 電話予約の代理登録 | (スケジュールからの新規登録) | ✅実装・デプロイ済み(2026-09-14) |
 | PATCH | `/admin/reservations/:id` | ステータス変更・スタッフ/時間の変更 | (予約詳細での更新) | ✅実装・デプロイ済み(2026-09-14) |
 | GET/PUT/POST | `/admin/business-days` | 月次の営業日・受付時間設定(POSTは`generate-month`による一括生成) | 毎月の受付設定(サロン) | ✅実装・デプロイ済み(2026-09-16) |
@@ -47,6 +47,8 @@
 
 管理APIは全エンドポイントで `_shared/auth.ts` の `requireStaff()` を通し、`staff.auth_user_id` に紐づくログイン中のスタッフ本人であることを検証してから処理する。
 
+**保守用アカウント(`staff.role = 'maintainer'`、2026-09-28)は閲覧専用**: `requireStaff()`がHTTPメソッドで判定し、GET/HEAD/OPTIONS以外(POST/PUT/PATCH/DELETE)は`403 FORBIDDEN`で拒否する。ルートごとにチェックを書くのではなく入口で一括判定するため、今後書き込み系の管理APIを追加しても自動的に保護される(**管理APIで書き込みをGETで実装しないこと**)。店舗スタッフ(owner/stylist/assistant)は従来どおり全メソッド可。
+
 ## 主要エンドポイントの詳細
 
 ### GET /availability
@@ -59,7 +61,7 @@
 
 **処理**:
 1. `business_days` からその日の営業時間を取得。`is_open=false`、またはレコード自体が無い場合は空き枠なしを返す。
-2. 候補スタッフを決定(`staff_id`で指定された1名。`role='assistant'`は対象外)。
+2. 候補スタッフを決定(`staff_id`で指定された1名。`role='assistant'`/`'maintainer'`は対象外)。
 3. 各スタッフについて、`max(business_days.open_time, shift.start_time)` から `min(business_days.last_reception_time, shift.end_time)` の範囲で、`menus.duration_minutes` 刻みではなく **固定グラニュラリティ(既定30分)** で候補開始時刻を列挙する。
 4. 各候補について `[開始, 開始+duration)` が既存予約(`status`が稼働中とみなされるもの)と重ならないかを、`reservations` の `time_range` に対して`&&`判定で除外する。
 5. 過去時刻(現在時刻以前)の枠は除外する。

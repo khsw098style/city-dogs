@@ -48,6 +48,7 @@
 <!-- アプリ本体 -->
 <div id="appScreen" class="app-screen" hidden>
 
+  <div class="app-top">
   <header class="app-header">
     <div class="app-header-left">
       <span class="brand-mark" aria-hidden="true"><img src="images/logo-mark.png" alt=""></span>
@@ -71,6 +72,7 @@
     <button type="button" class="tab-btn" data-tab="customers"><img src="images/customers.png" alt=""><span>顧客管理</span></button>
     <button type="button" class="tab-btn" data-tab="revenue"><img src="images/revenue.png" alt=""><span>売上予定・実績</span></button>
   </nav>
+  </div>
 
   <main class="app-main">
 
@@ -93,6 +95,7 @@
 
     <!-- 検索タブ -->
     <section class="tab-panel" data-tab="search">
+      <p class="content-note">初期表示は本日以降の予約です(来店日時の早い順)。過去の予約を探すときは「来店日(from)」を変更するか空欄にして検索してください。</p>
       <form id="searchForm" class="search-form">
         <div class="search-field">
           <label for="searchReservationNumber">予約番号</label>
@@ -137,6 +140,7 @@
 
       <div id="searchResultMeta" class="search-result-meta"></div>
       <div id="searchArea" class="search-area"></div>
+      <div id="searchPager" class="search-pager"></div>
     </section>
 
     <!-- LPコンテンツタブ -->

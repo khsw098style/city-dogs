@@ -1,7 +1,10 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ApiError, jsonResponse } from "../_shared/http.ts";
 import { isValidUuid, requireNonEmptyString } from "../_shared/validation.ts";
+import { MAINTAINER_ROLE } from "../_shared/staffRoles.ts";
 
+// 店舗側の管理画面から作成・変更できるロール。maintainer(保守用)はここに含めない
+// (保守用アカウントはDBで直接作成する。店舗のスタッフ管理画面には表示もしない)。
 const VALID_ROLES = ["owner", "stylist", "assistant"] as const;
 type StaffRole = (typeof VALID_ROLES)[number];
 
@@ -24,6 +27,7 @@ export async function listStaffBios(client: SupabaseClient, headers: HeadersInit
   const { data, error } = await client
     .from("staff")
     .select(SELECT_COLUMNS)
+    .neq("role", MAINTAINER_ROLE)
     .order("display_order", { ascending: true });
   if (error) throw new ApiError("INTERNAL_ERROR", "スタッフ情報の取得に失敗しました。");
   return jsonResponse({ staff: data }, { headers });

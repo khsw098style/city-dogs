@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ApiError, jsonResponse } from "../_shared/http.ts";
 import { isValidUuid } from "../_shared/validation.ts";
+import { MAINTAINER_ROLE } from "../_shared/staffRoles.ts";
 
 interface ShiftBody {
   is_working?: boolean;
@@ -148,7 +149,8 @@ export async function generateMonthShifts(req: Request, client: SupabaseClient, 
     const { data: staffRows, error: staffErr } = await client
       .from("staff")
       .select("id")
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .neq("role", MAINTAINER_ROLE);
     if (staffErr) throw new ApiError("INTERNAL_ERROR", "スタッフ情報の取得に失敗しました。");
     staffIds = (staffRows ?? []).map((s) => s.id as string);
   }
