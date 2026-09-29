@@ -47,7 +47,7 @@
 | データベース | PostgreSQL(Supabase) | スキーマは [booking/supabase/migrations/](./booking/supabase/migrations/)(0001〜0014) |
 | API | Supabase Edge Functions(Deno/TypeScript) | テーブルへの直接アクセス(PostgREST自動API)は使わず必ずこの層を経由。設計は [booking/design/api-design.md](./booking/design/api-design.md)。全テーブルRLS有効化済み(ポリシーなし、service_roleのみアクセス可) |
 | 認証(予約管理画面) | Supabase Auth(email/password)。`staff.auth_user_id`でstaffと紐付け | `_shared/auth.ts`のrequireStaff()で検証。顧客側(公開API)は認証なし |
-| 予約管理画面(`booking/admin/`) | HTML / CSS / Vanilla JS + `@supabase/supabase-js`(CDN) | スタッフ・オーナー向け内部ツール。予約管理・LPコンテンツ編集・営業日/シフト設定・顧客管理まですべて実装済み(api-design.md記載の機能はすべて完了) |
+| 予約管理画面(`booking/admin/`) | HTML / CSS / Vanilla JS(ESモジュール) + `@supabase/supabase-js`(CDN) | スタッフ・オーナー向け内部ツール。予約管理・LPコンテンツ編集・営業日/シフト設定・顧客管理まですべて実装済み(api-design.md記載の機能はすべて完了)。`js/`はタブ・機能ごとに`core.js`等へ分割済み(2026-09-29、ビルドツールなしでネイティブESモジュールを使用) |
 | ホスティング | Cloudflare Workers(静的アセット配信) | `booking/admin/wrangler.jsonc`・`.assetsignore`必須 |
 | ボット対策 | Cloudflare Turnstile(`POST /reservations`・管理画面ログイン) + レート制限(`_shared/rateLimit.ts`) | 本番用サイトキー・シークレットキー設定済み |
 | メール送信 | Resend(https://resend.com、無料枠) | `RESEND_API_KEY`設定済み。`MANAGE_PAGE_BASE_URL`・`RESEND_FROM_ADDRESS`は独自ドメイン未確定のため未設定(下記参照) |
@@ -94,7 +94,17 @@ city-dogs/
     │   ├── css/admin.css
     │   ├── js/
     │   │   ├── config.js         # 🏪店舗固有
-    │   │   └── admin.js
+    │   │   ├── admin.js          # エントリーポイント(各モジュールをimportするだけ、2026-09-29に分割)
+    │   │   ├── core.js           # 全タブ共通(Supabaseクライアント・DOM参照・フォーマッタ・画像アップロード等)
+    │   │   ├── auth.js           # ログイン・ログアウト・パスワード変更・Turnstile
+    │   │   ├── tabs.js           # タブ切替・初回ログイン時の配線オーケストレーター
+    │   │   ├── schedule.js       # スケジュールタブ
+    │   │   ├── reservationModal.js  # 電話予約の代理登録・予約編集(スケジュール/検索の両方から使用)
+    │   │   ├── search.js         # 予約検索タブ
+    │   │   ├── content.js        # LPコンテンツタブ
+    │   │   ├── shifts.js         # 営業日・シフトタブ
+    │   │   ├── customers.js      # 顧客管理タブ
+    │   │   └── revenue.js        # 売上予定・実績タブ
     │   └── tests/admin.e2e.mjs   # 要SUPABASE_SERVICE_ROLE_KEY環境変数
     └── supabase/
         ├── README.md             # セットアップ・デプロイ手順

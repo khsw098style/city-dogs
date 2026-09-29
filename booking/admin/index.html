@@ -16,9 +16,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/admin.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0"></script>
-<!-- asyncは付けない: deferだけにしないと、window.onTurnstileLoadを定義するjs/admin.jsより先に
-     このスクリプトが実行され、コールバックが見つからなくなる(lp/reserve.htmlと同じ理由)。 -->
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad&render=explicit" defer></script>
 </head>
 <body>
 
@@ -537,6 +534,10 @@
 </div>
 
 <script src="js/config.js"></script>
-<script src="js/admin.js"></script>
+<script type="module" src="js/admin.js"></script>
+<!-- type="module"はdefer相当なので、window.onTurnstileLoad(js/auth.js内で定義)を
+     このスクリプトより先に評価させるため、Turnstile本体の読み込みはここより後ろに置く
+     (defer/モジュールは文書内の出現順で実行されるため。lp/reserve.htmlも同じ理由で同様の順序)。 -->
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad&render=explicit" defer></script>
 </body>
 </html>

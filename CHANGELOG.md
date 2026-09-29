@@ -156,3 +156,11 @@ CONCEPT(特徴カード)・SHOP & STYLE(スタイル例)は上限なしで追加
 - `reserve.js`の先頭(Turnstileコールバック定義より前)でこのフラグを見て、trueならウィザード(`.wizard`)を`result-card`スタイルの案内に差し替えて`return`する。メニュー取得・空き枠計算などのAPIは一切呼ばれない。
 - **🐛 実装中に踏んだ落とし穴**: 最初、メンテナンス判定をTurnstileコールバック(`window.onTurnstileLoad`)の定義より後に置いたところ、`#turnstileWidget`ごとDOMを差し替えて消しているのに、deferで後から読み込まれるCloudflareのTurnstileスクリプトが`onTurnstileLoad`を呼び出し「コンテナが見つからない」というエラーをコンソールに出した。判定をTurnstile設定より前に移動し、メンテナンス時は`window.onTurnstileLoad`を空関数にすることで解消。**教訓: グローバルコールバックを登録するコードと、そのコールバックが依存するDOM要素を消すかもしれない分岐がある時は、必ず前者より前に分岐判定を置く。**
 - 運用手順(メンテナンスON→修正→E2E→テストデータ削除→OFF)とあわせて、「本番運用開始後にE2Eを回す時は作成したテストデータを必ず全部消す」というルールをTESTING.mdに明文化した。今の段階(実予約ゼロ)ではDB全体がテストデータなので影響が薄いが、本運用開始後は実データとの混在が実害になるため。
+
+### 管理画面のadmin.jsを機能ごとのファイルへ分割(2026-09-29)
+2422行の単一ファイルにスケジュール・検索・LPコンテンツ・シフト・顧客管理・売上の全タブが入っており可読性が落ちていたため、タブ・機能ごとに分割した。
+- **構成**: `core.js`(Supabaseクライアント・DOM参照・フォーマッタ・画像アップロード等、全タブ共通)/`auth.js`(ログイン・Turnstile)/`tabs.js`(タブ切替の配線オーケストレーター)/`schedule.js`/`reservationModal.js`(電話予約の代理登録・編集。スケジュール・検索の両方から開けるため単独ファイル)/`search.js`/`content.js`/`shifts.js`/`customers.js`/`revenue.js`。`admin.js`自体は各ファイルをimportするだけの薄いエントリーポイントになった。
+- **技術選定**: ビルドツール・バンドラーを使わない方針(CLAUDE.md参照)のため、ネイティブESモジュール(`<script type="module">`+`import`/`export`)を採用。Cloudflare Workersの静的アセット配信はファイルをそのまま返すだけなので、ビルド不要でそのまま動く。
+- **🐛 Turnstileの実行順序**: `type="module"`はdefer相当のため、それまで「defer無しの通常スクリプト」だった`admin.js`より前に、Cloudflare TurnstileのスクリプトがHTML内で先に出現していると、そちらが先に実行され`window.onTurnstileLoad`(auth.js内で定義)が未定義のまま呼ばれてしまう(defer/モジュールはダウンロード完了順ではなく文書内の出現順で実行されるため)。Turnstileの`<script>`タグを`<head>`から`<script type="module" src="js/admin.js">`より後ろへ移動して解消した(lp/reserve.htmlの既存コメントと同じ理由)。
+- **循環import**: `schedule.js`⇄`reservationModal.js`、`search.js`⇄`reservationModal.js`は互いにimportし合う(予約編集はどちらのタブからも開け、編集後はアクティブな方のタブを再読み込みするため)。いずれも関数呼び出しの中でしか使わない(モジュール評価時に即実行しない)ため、ESモジュールの循環import は安全に動作する。無理に共有レジストリ等を導入して回避しなかった。
+- **確認方法**: `admin.e2e.mjs`をフルで実行(全17ステップ、保守用ロールの確認含む)。Turnstileのテスト用キー切り替え(サイトキーはテストが自動、Attack Protectionのシークレットはダッシュボードで手動)が必要だった。ブラウザのコンソールエラーなし、全項目オールグリーンを確認。
