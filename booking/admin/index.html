@@ -47,28 +47,33 @@
 
   <div class="app-top">
   <header class="app-header">
-    <div class="app-header-left">
-      <span class="brand-mark" aria-hidden="true"><img src="images/logo-mark.png" alt=""></span>
-      <span class="brand-text">
-        <span class="brand-name">City Dogs</span>
-        <span class="brand-sub">STAFF ADMIN</span>
-      </span>
-    </div>
-    <div class="app-header-right">
-      <span class="staff-name" id="staffName"></span>
-      <button type="button" class="btn btn-ghost btn-small" id="changePasswordBtn">パスワードを変更</button>
-      <button type="button" class="btn btn-ghost btn-small" id="logoutBtn">ログアウト</button>
+    <div class="app-header-inner">
+      <div class="app-header-left">
+        <span class="brand-mark" aria-hidden="true"><img src="images/logo-mark.png" alt=""></span>
+        <span class="brand-text">
+          <span class="brand-name">City Dogs</span>
+          <span class="brand-sub">STAFF ADMIN</span>
+        </span>
+      </div>
+
+      <!-- LPのヘッダー(lp/index.html .main-nav)と同じく、アイコン+ラベルのタブをヘッダー内に
+           横並びで配置する(2026-09-29、以前は下にもう1段のタブバーとして分離していた)。 -->
+      <nav class="tab-bar-inner">
+        <button type="button" class="tab-btn is-active" data-tab="schedule"><img src="images/schedule.png" alt=""><span>スケジュール</span></button>
+        <button type="button" class="tab-btn" data-tab="search"><img src="images/search.png" alt=""><span>予約検索</span></button>
+        <button type="button" class="tab-btn" data-tab="content"><img src="images/content.png" alt=""><span>LPコンテンツ</span></button>
+        <button type="button" class="tab-btn" data-tab="shifts"><img src="images/shifts.png" alt=""><span>営業日・シフト</span></button>
+        <button type="button" class="tab-btn" data-tab="customers"><img src="images/customers.png" alt=""><span>顧客管理</span></button>
+        <button type="button" class="tab-btn" data-tab="revenue"><img src="images/revenue.png" alt=""><span>売上予定・実績</span></button>
+      </nav>
+
+      <div class="app-header-right">
+        <span class="staff-name" id="staffName"></span>
+        <button type="button" class="btn btn-ghost btn-small" id="changePasswordBtn">パスワードを変更</button>
+        <button type="button" class="btn btn-ghost btn-small" id="logoutBtn">ログアウト</button>
+      </div>
     </div>
   </header>
-
-  <nav class="tab-bar">
-    <button type="button" class="tab-btn is-active" data-tab="schedule"><img src="images/schedule.png" alt=""><span>スケジュール</span></button>
-    <button type="button" class="tab-btn" data-tab="search"><img src="images/search.png" alt=""><span>予約検索</span></button>
-    <button type="button" class="tab-btn" data-tab="content"><img src="images/content.png" alt=""><span>LPコンテンツ</span></button>
-    <button type="button" class="tab-btn" data-tab="shifts"><img src="images/shifts.png" alt=""><span>営業日・シフト</span></button>
-    <button type="button" class="tab-btn" data-tab="customers"><img src="images/customers.png" alt=""><span>顧客管理</span></button>
-    <button type="button" class="tab-btn" data-tab="revenue"><img src="images/revenue.png" alt=""><span>売上予定・実績</span></button>
-  </nav>
   </div>
 
   <main class="app-main">

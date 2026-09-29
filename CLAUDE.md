@@ -88,6 +88,8 @@ city-dogs/
     │   ├── data-model.md / er-diagram.html / api-design.md / api-diagrams.html
     ├── reference/                # HotPepper参考資料(公開リポジトリには含めない、.gitignoreで除外)
     ├── package.json / .gitignore
+    ├── scripts/
+    │   └── cleanup-test-data.mjs  # テストデータの一括削除(パターン一致で検出→確認→削除。使い方はTESTING.md参照)
     ├── admin/                    # 予約管理画面(要ログイン。「LPコンテンツ」タブとしてLP編集機能も統合)
     │   ├── index.html
     │   ├── wrangler.jsonc / .assetsignore
