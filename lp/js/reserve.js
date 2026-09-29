@@ -5,6 +5,39 @@
   const { SUPABASE_URL, ANON_KEY, TURNSTILE_SITE_KEY } = window.CITY_DOGS_CONFIG;
   const API_BASE = `${SUPABASE_URL}/functions/v1`;
 
+  // 計画的なメンテナンス(DB移行作業など)でWEB予約を一時停止する時のフラグ。
+  // config.jsでtrueにしてpushすると、ウィザードの代わりにこの案内を表示し、以降の
+  // 初期化(メニュー読み込み・イベント配線・Turnstileウィジェット描画)は一切行わない
+  // (APIも呼ばない)。この判定はTurnstileのコールバック定義より前に置くこと
+  // (#turnstileWidgetごとDOMから消すため、後にすると「コンテナが見つからない」という
+  // Turnstile側のエラーが出る)。
+  if (window.CITY_DOGS_CONFIG.RESERVATION_MAINTENANCE) {
+    window.onTurnstileLoad = () => {}; // ウィジェットは表示しないため何もしない
+    const lead = document.querySelector('.reserve-lead');
+    if (lead) lead.textContent = 'ただいまメンテナンス中のため、WEBでのご予約を一時的に停止しております。';
+    const progress = document.getElementById('wizardProgress');
+    if (progress) progress.hidden = true;
+    const wizard = document.querySelector('.wizard');
+    if (wizard) {
+      wizard.innerHTML = `
+        <section class="wizard-step is-active">
+          <div class="result-card">
+            <div class="result-icon is-error" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="28" height="28"><path d="M12 3v10m0 4v.01" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <h2>ご不便をおかけしております</h2>
+            <p>WEBでのご予約は現在ご利用いただけません。お急ぎの場合はお電話にてご予約ください。</p>
+            <div class="result-actions">
+              <a href="tel:08064810409" class="btn btn-primary">電話で予約する</a>
+              <a href="index.html" class="btn btn-ghost">トップページに戻る</a>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+    return;
+  }
+
   // Cloudflare Turnstile(ボット対策)。reserve.html側でrender=explicitを指定しており、
   // スクリプト読み込み完了時にこのコールバックが呼ばれてから明示的にウィジェットを描画する
   // (data-sitekeyをHTMLに直書きせず、config.jsの値を使うため)。

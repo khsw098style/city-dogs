@@ -121,10 +121,29 @@ async function run() {
 
     const staffCount = await page.locator('#staffGrid .staff-card').count();
     if (staffCount !== 2) failures.push(`STAFF: 期待したスタッフ数(2)と異なる: ${staffCount}`);
+    // 氏名は2026-09-29に管理画面から実名(當眞 優希/大城 開)へ変更された。実名を
+    // このファイルに決め打ちで書きたくないため、評価バッジ・ギャラリーと同じ考え方で
+    // /site-content の実際の値と突き合わせる(名前が今後また変わっても壊れない)。
+    const apiStaff = await page.evaluate(async () => {
+      const { SUPABASE_URL, ANON_KEY } = window.CITY_DOGS_CONFIG;
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/site-content`, {
+        headers: { Authorization: `Bearer ${ANON_KEY}` },
+      });
+      const data = await res.json();
+      return data.staff;
+    });
     const staffNameText = await page.locator('#staffGrid .staff-name').first().textContent();
-    if (!staffNameText.includes('スタイリスト')) failures.push(`STAFF: 先頭スタッフの氏名が想定と異なる: ${staffNameText}`);
+    if (!apiStaff?.[0]?.name) {
+      failures.push('STAFF: GET /site-contentのstaff[0].nameが取得できない');
+    } else if (!staffNameText.includes(apiStaff[0].name)) {
+      failures.push(`STAFF: 先頭スタッフの氏名がAPIレスポンスと一致しない(表示="${staffNameText}", API="${apiStaff[0].name}")`);
+    }
     const staffRoleText = await page.locator('#staffGrid .staff-role').first().textContent();
-    if (!staffRoleText.includes('理容歴4年')) failures.push(`STAFF: 肩書き(bio_role_label)が反映されていない: ${staffRoleText}`);
+    if (!apiStaff?.[0]?.bio_role_label) {
+      failures.push('STAFF: GET /site-contentのstaff[0].bio_role_labelが取得できない');
+    } else if (!staffRoleText.includes(apiStaff[0].bio_role_label)) {
+      failures.push(`STAFF: 肩書きがAPIレスポンスと一致しない(表示="${staffRoleText}", API="${apiStaff[0].bio_role_label}")`);
+    }
 
     // 評価バッジ(★スコア・口コミ件数)は管理画面から手動更新される値(site_ratingテーブル)なので、
     // 決め打ちの期待値ではなく、同じブラウザコンテキストから /site-content を直接叩いた結果と

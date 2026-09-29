@@ -8,4 +8,9 @@ window.CITY_DOGS_CONFIG = {
   // Cloudflare Turnstileのサイトキー(公開情報、秘匿不要)。
   // city-dogs.khs-w098style.workers.dev のHostname Managementに登録済み(2026-09-16)。
   TURNSTILE_SITE_KEY: '0x4AAAAAAE4sxhHQSTp5lim6',
+  // WEB予約(reserve.html)を計画的に一時停止したい時(DB移行作業など)にtrueにしてpushする。
+  // trueの間、reserve.jsはウィザードの代わりにメンテナンス中の案内を表示する(2026-09-29追加)。
+  // ローカルで修正・E2E確認する間は、このファイルを一時的にfalseにすれば良い(コミット不要。
+  // 最後に確認が終わったらfalseのまま、修正内容と一緒にpushして本番も解除する)。
+  RESERVATION_MAINTENANCE: false,
 };
