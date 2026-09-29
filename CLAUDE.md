@@ -164,6 +164,7 @@ SUPABASE_SERVICE_ROLE_KEY=<Project Settings > API のservice_roleキー> npm run
 ## 現在地・未決事項
 
 - **LP**: WEB予約(`reserve.html`)は実装・デプロイ済みで稼働可能だが、オーナー説明の都合で**導線を意図的に一時クローズ中**(「WEBで予約する」ボタン非表示→「近日公開予定」の案内文に差し替え)。バックエンドは温存しているので、リンクを戻すだけで即座に再公開できる
+- **開発フェーズの区切り(2026-09-29)**: オーナーと契約成立。当面は追加開発を進めながらローカル確認が中心になる見込みのため、Supabase Proは一旦解約予定(DBアクセスは定期的に発生する想定なのでFree化後のauto-pauseは実害が薄いと判断)。ある程度まとまった機能ができるたびに見せる運用とし、大きめの追加開発の目処が立った際に再度Proを契約する。管理画面`ENABLED_TABS`はこの間、schedule/search/customers/revenueをfalse・shifts/contentのみtrueにしている(ローカルでの機能確認に不要なタブを一時的に隠しているだけで、店舗への出し分け設定ではない。再開時に必要に応じてtrueへ戻すこと)。詳しい経緯はCHANGELOG.md参照
 - **WEB予約のメンテナンスフラグ(2026-09-29追加)**: `lp/js/config.js`の`RESERVATION_MAINTENANCE`を`true`にしてpushすると、`reserve.html`はウィザードの代わりにメンテナンス案内(電話予約への誘導つき)を表示し、API呼び出しも行わなくなる。本番運用開始後に不具合修正でE2Eを回す時の手順・作成したテストデータを必ず削除するルールはTESTING.md参照
 - **モバイル優先**: LP・予約フロー(`index.html`/`reserve.html`/`manage.html`)はスマホ利用が大多数の想定。変更時は必ずモバイル幅での見た目を優先して確認すること。管理画面(`booking/admin/`)はPC専用でよい(スタッフはPC/タブレットから利用)
 - **予約管理リンク(`manage_token`方式)は実装済みだが実運用不可**: `MANAGE_PAGE_BASE_URL`が独自ドメイン未確定のため未設定。設定するまでメール内リンクは`https://your-domain-not-configured.example/manage.html`というプレースホルダーのまま送信される

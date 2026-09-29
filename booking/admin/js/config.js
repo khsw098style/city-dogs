@@ -14,12 +14,12 @@ window.CITY_DOGS_CONFIG = {
   // 納品前にここでfalseにすればそのタブ自体を非表示にできる(オーナー自身は変更しない、
   // 開発者がこのファイルを直接編集して納品する運用。キー未指定時はtrue扱い)。
   ENABLED_TABS: {
-    schedule: true,
-    search: true,
+    schedule: false,
+    search: false,
     content: true,
     shifts: true,
-    customers: true,
-    revenue: true,
+    customers: false,
+    revenue: false,
   },
   // 予約検索タブの1ページあたりの表示件数(未指定・不正な値は30。APIの上限は200)。
   SEARCH_PAGE_SIZE: 30,
