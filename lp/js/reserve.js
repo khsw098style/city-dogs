@@ -221,11 +221,16 @@
   // (日時はel.staffSelectのchangeハンドラと同じく担当をまたいで保持してよい値のため、
   // ここで無条件にリセットしない)。維持できない場合だけ選び直しにし、既存の空き枠(担当が
   // 変わり得るため)をリセットする。
+  let staffRequestVersion = 0;
+  let availabilityRequestVersion = 0;
   async function loadStaffList(menuIds) {
+    const requestVersion = ++staffRequestVersion;
+    ++availabilityRequestVersion;
     const previousStaffId = state.selectedStaffId;
     try {
       const query = menuIds && menuIds.length > 0 ? `?menu_ids=${menuIds.join(',')}` : '';
       const data = await apiFetch(`/staff${query}`);
+      if (requestVersion !== staffRequestVersion) return false;
       state.staffList = data.staff || [];
       if (state.staffList.length === 0) {
         el.staffSelect.innerHTML = '<option value="" disabled selected>選んだメニューに対応できるスタイリストがいません。お電話にてお問い合わせください。</option>';
@@ -245,12 +250,15 @@
         state.selectedSlot = null;
         el.toStep3.disabled = true;
       }
+      return true;
     } catch (err) {
+      if (requestVersion !== staffRequestVersion) return false;
       console.error('スタッフ一覧の取得に失敗しました:', err.message);
       el.staffSelect.innerHTML = '<option value="" disabled selected>取得に失敗しました。再読み込みしてください</option>';
       state.selectedStaffId = '';
       state.selectedSlot = null;
       el.toStep3.disabled = true;
+      return false;
     }
   }
 
@@ -354,6 +362,7 @@
     refreshMenuSelectionUi();
 
     // メニューを変えたら、選び直しになるので日時選択をリセットする
+    ++availabilityRequestVersion;
     state.selectedDate = null;
     state.selectedSlot = null;
     el.toStep3.disabled = true;
@@ -394,8 +403,8 @@
     // ステップ1で選んだメニューが確定したので、そのメニュー全部に対応できるスタイリストだけに
     // 絞り込む(2026-09-30〜)。それまで選んでいた担当がまだ選べるなら維持し、日時もそのまま
     // 再利用する(loadStaffList内の判定)。
-    loadStaffList(getSelection().ids).then(() => {
-      if (el.dateInput.value) loadAvailability(el.dateInput.value);
+    loadStaffList(getSelection().ids).then((isCurrent) => {
+      if (isCurrent && el.dateInput.value) loadAvailability(el.dateInput.value);
     });
   });
 
@@ -431,6 +440,7 @@
   });
 
   async function loadAvailability(date) {
+    const requestVersion = ++availabilityRequestVersion;
     state.selectedDate = date;
     el.slotArea.innerHTML = '<p class="wizard-status">空き状況を確認しています…</p>';
 
@@ -447,9 +457,11 @@
     try {
       const params = new URLSearchParams({ date, menu_ids: selection.ids.join(','), staff_id: state.selectedStaffId });
       const data = await apiFetch(`/availability?${params.toString()}`);
+      if (requestVersion !== availabilityRequestVersion) return;
       state.slots = data.slots || [];
       renderSlots(data);
     } catch (err) {
+      if (requestVersion !== availabilityRequestVersion) return;
       renderErrorWithReload(el.slotArea, '空き状況の取得に失敗しました。', err.message);
     }
   }
