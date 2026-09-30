@@ -96,6 +96,12 @@ const TEST_CUSTOMER_NAME = 'E2Eテスト顧客';
 const TEST_PHONE_RAW = '08000000001'; // ハイフンなしで入力し、自動整形されるかも合わせて確認する
 const TEST_PHONE_FORMATTED = '080-0000-0001';
 
+// 「検索タブから直接、予約編集を開く」再現用(2026-09-30)。電話予約の代理登録(TEST_PHONE_RAW)とは
+// 別の電話番号にする(customers.phoneのunique制約のため、両方を同時に存在させたい)。
+const DIRECT_EDIT_CUSTOMER_NAME = 'E2Eテスト顧客(検索編集確認用)';
+const DIRECT_EDIT_PHONE = '08000000002';
+const DIRECT_EDIT_NOTE = 'E2Eテスト(検索タブから直接編集を開く動作確認用)';
+
 function formatDateLocal(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -403,6 +409,72 @@ async function run() {
       throw new Error(`不正な日付がVALIDATION_ERRORにならず、status=${badDate.status}でした。`);
     }
     console.log(`   全${allList.body.total}件 = 本日以降${upcomingList.body.total}件 + 昨日以前${pastList.body.total}件、ページ送り・並び順・不正日付の拒否を確認`);
+
+    console.log('4.5. 予約検索タブから直接「編集」を開く(スタッフ選択肢が未キャッシュの状態を再現)...');
+    // ここまで電話予約の代理登録モーダル(#openCreateReservation)やシフトタブを一度も開いていない
+    // ため、スタッフ選択肢のキャッシュ(loadStaffOptions())はまだ空。この状態で検索タブから直接
+    // 「編集」を開くと、staff_idが空のまま空き枠を問い合わせて「staff_id は必須です」エラーになる
+    // 不具合が実機で発生した(2026-09-30、手動確認で発見)。UIの代理登録モーダルを経由すると
+    // その時点でキャッシュが温まってしまい再現しないため、予約自体はservice_role経由の直接INSERTで
+    // 用意し、キャッシュが冷えたままの状態を保つ。
+    await admin.from('reservations').delete().eq('notes', DIRECT_EDIT_NOTE); // 再実行時の重複を防ぐ
+    await admin.from('customers').delete().eq('phone', DIRECT_EDIT_PHONE);
+    const { data: directEditMenu, error: directEditMenuErr } = await admin
+      .from('menus').select('id, duration_minutes').eq('is_active', true).limit(1).single();
+    if (directEditMenuErr || !directEditMenu) throw new Error(`テスト用メニューの取得に失敗: ${directEditMenuErr?.message}`);
+    const { data: directEditCustomer, error: directEditCustErr } = await admin
+      .from('customers').insert({ name: DIRECT_EDIT_CUSTOMER_NAME, phone: DIRECT_EDIT_PHONE }).select('id').single();
+    if (directEditCustErr) throw new Error(`テスト用顧客の作成に失敗: ${directEditCustErr.message}`);
+    const directEditStart = new Date(Date.now() + 200 * 86400000); // 実行日+200日、他の予約と衝突しにくい遠い未来日
+    directEditStart.setHours(10, 0, 0, 0);
+    const directEditEnd = new Date(directEditStart.getTime() + directEditMenu.duration_minutes * 60000);
+    const { data: directEditReservation, error: directEditResErr } = await admin
+      .from('reservations')
+      .insert({
+        customer_id: directEditCustomer.id,
+        staff_id: staffRow.id,
+        menu_id: directEditMenu.id,
+        time_range: `[${directEditStart.toISOString()},${directEditEnd.toISOString()})`,
+        status: 'confirmed',
+        source: 'phone',
+        price_at_booking: 1000,
+        notes: DIRECT_EDIT_NOTE,
+      })
+      .select('id, reservation_number')
+      .single();
+    if (directEditResErr) throw new Error(`テスト用予約の作成に失敗: ${directEditResErr.message}`);
+
+    await page.click('.tab-btn[data-tab="search"]');
+    await page.fill('#searchReservationNumber', directEditReservation.reservation_number);
+    await page.click('#searchForm button[type="submit"]');
+    const directEditBtn = page.locator(`.edit-reservation-btn[data-id="${directEditReservation.id}"]`);
+    await directEditBtn.waitFor({ timeout: 10000 });
+    await directEditBtn.click();
+    await page.locator('#editReservationModal').waitFor({ state: 'visible' });
+    // リスケジュール欄の担当者は、キャッシュが無くても後から読み込み直されて現在の担当(staffRow)が
+    // 選択されているはず。空き枠も「取得に失敗しました」ではなく実際の選択肢になっていることを確認する。
+    await page.waitForFunction(
+      () => document.getElementById('editStaffSelect')?.value,
+      { timeout: 10000 },
+    );
+    const directEditStaffValue = await page.inputValue('#editStaffSelect');
+    if (directEditStaffValue !== staffRow.id) {
+      throw new Error(`検索タブから直接開いた編集モーダルで、担当スタイリストが現在の担当(${staffRow.id})に選択されていません(実際: "${directEditStaffValue}")。`);
+    }
+    await page.waitForFunction(
+      () => {
+        const el = document.getElementById('editSlotSelect');
+        return el && el.options.length > 0 && el.options[0].value !== '' && !el.parentElement.innerHTML.includes('読み込み中');
+      },
+      { timeout: 10000 },
+    );
+    const directEditRescheduleErrorVisible = await page.locator('#editRescheduleError').isVisible();
+    if (directEditRescheduleErrorVisible) {
+      const errText = await page.locator('#editRescheduleError').innerText();
+      throw new Error(`検索タブから直接編集を開いた際、リスケジュール欄にエラーが表示されています: "${errText}"`);
+    }
+    await page.click('[data-close-modal="editReservationModal"]');
+    console.log('   スタッフ未キャッシュの状態でも、検索タブから直接開いた編集モーダルが正しく動くことを確認');
 
     console.log('5. LPコンテンツタブへ切り替え...');
     await page.click('.tab-btn[data-tab="content"]');

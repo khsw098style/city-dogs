@@ -293,7 +293,12 @@ export function openEditReservationModal(reservation) {
   el.editDateInput.value = formatDateLocal(start);
 
   openModal(el.editReservationModal);
-  refreshEditSlots();
+  // スタッフ選択肢が未取得(検索タブから直接開いた等)だと、<select>に選択肢が1つも無いまま
+  // ここでrefreshEditSlots()を呼んでしまい、staff_idが空の状態でAPIを叩いて「staff_id は必須です」
+  // というエラーになっていた(下の非同期読み込みで選び直しても、このエラー表示だけが残り続ける
+  // 不具合もあった)。選択肢が揃っている時だけここで呼び、揃っていなければ下の読み込み完了後の
+  // refreshEditSlots()だけに任せる(2026-09-30、テストデータでの手動確認で発見)。
+  if (getCachedStaffOptions()) refreshEditSlots();
 
   // スタッフ選択肢が未取得(検索タブから直接開いた等)ならここで読み込んでから選択し直す
   if (!getCachedStaffOptions()) {
@@ -323,6 +328,9 @@ async function refreshEditSlots() {
   }
   const requestId = ++editSlotsRequestId;
   el.editSlotSelect.innerHTML = '<option value="">読み込み中…</option>';
+  // やり直すたびに前回のエラー表示を消す(前回失敗→今回成功のケースで、成功したのにエラー文言だけ
+  // 残り続けるのを防ぐ)。
+  hideFormError(el.editRescheduleError);
   try {
     // exclude_reservation_idでこの予約自身の枠を空き判定から除外してもらうので、
     // 「今使っている枠」を自前で選択肢に補完する必要はない(休憩・営業時間の変更も

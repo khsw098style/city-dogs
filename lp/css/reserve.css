@@ -440,3 +440,7 @@ textarea { resize: vertical; }
   .wizard-progress-label { display: none; }
   .wizard-progress li:not(:last-child)::after { width: 1.2rem; margin: 0 0.4rem; }
 }
+
+/* ヘッダーの main-nav を空にした(index.html参照)のに伴い、開いても何も出ないハンバーガー
+   メニューのボタン自体も非表示にする(2026-09-30)。 */
+.nav-toggle { display: none; }

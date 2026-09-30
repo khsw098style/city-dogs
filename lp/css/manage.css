@@ -59,3 +59,7 @@
 }
 .cancel-confirm p { margin: 0 0 1rem; font-size: 0.9rem; }
 .cancel-confirm .wizard-actions { border-top: none; margin-top: 0; padding-top: 0; }
+
+/* ヘッダーの main-nav を空にした(index.html参照)のに伴い、開いても何も出ないハンバーガー
+   メニューのボタン自体も非表示にする(2026-09-30)。 */
+.nav-toggle { display: none; }

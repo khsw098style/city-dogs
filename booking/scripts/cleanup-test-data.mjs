@@ -63,6 +63,23 @@ function todayJst() {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
 }
 
+const LOG_LIMIT = 10;
+
+// 一覧が長くなりすぎないよう、先頭LOG_LIMIT件だけ表示用の行に変換し、残りは件数でまとめる。
+// formatLineは1件を「  - ...」のような表示用の文字列(複数行でも可)にする関数。
+// 顧客→予約のような入れ子表示にも使えるよう、console.logせず行の配列を返すだけにしてある。
+function capLines(items, formatLine) {
+  const shown = items.slice(0, LOG_LIMIT);
+  const lines = shown.map(formatLine);
+  const rest = items.length - shown.length;
+  if (rest > 0) lines.push(`  …ほか${rest}件`);
+  return lines;
+}
+
+function logList(items, formatLine) {
+  for (const line of capLines(items, formatLine)) console.log(line);
+}
+
 async function findTestCustomers() {
   const orParts = [
     ...TEST_CUSTOMER_NAMES.map((n) => `name.eq.${n}`),
@@ -95,12 +112,14 @@ async function cleanupReservationsAndCustomers() {
   if (resErr) throw new Error(`reservations取得に失敗: ${resErr.message}`);
 
   console.log(`■ テスト予約・テスト顧客: 顧客${customers.length}件・予約${(reservations ?? []).length}件`);
-  for (const c of customers) {
+  // 顧客一覧(先頭LOG_LIMIT件)・各顧客の予約一覧(同じく先頭LOG_LIMIT件)の二重に絞る。
+  logList(customers, (c) => {
     const own = (reservations ?? []).filter((r) => r.customer_id === c.id);
     const note = c.email === OWNER_TEST_EMAIL ? '(オーナー自身のテスト予約)' : '';
-    console.log(`  - ${c.name} / ${c.phone} / ${c.email ?? '(メールなし)'} ${note}`);
-    for (const r of own) console.log(`      予約 ${r.reservation_number}(${r.status})`);
-  }
+    const header = `  - ${c.name} / ${c.phone} / ${c.email ?? '(メールなし)'} ${note}`;
+    const resLines = capLines(own, (r) => `      予約 ${r.reservation_number}(${r.status})`);
+    return [header, ...resLines].join('\n');
+  });
 
   if (!APPLY) return;
 
@@ -128,16 +147,17 @@ async function cleanupBusinessDayNotes() {
   console.log(`■ 営業日のテスト用メモ: ${data.length}件`);
   const toDeleteDate = [];
   const toClearDate = [];
-  for (const row of data) {
+  // 表示を絞っても削除・更新の対象からは漏らさないよう、対象の収集(全件)と表示(先頭のみ)を分ける。
+  const lines = data.map((row) => {
     const daysAhead = Math.round((new Date(row.date) - today) / 86400000);
     if (daysAhead > FAR_FUTURE_DAYS) {
-      console.log(`  - ${row.date}(実行日+${daysAhead}日、シフトタブテスト専用の月 → 行ごと削除)`);
       toDeleteDate.push(row.date);
-    } else {
-      console.log(`  - ${row.date}(通常運用の範囲内 → メモだけ元に戻す。営業時間等はそのまま)`);
-      toClearDate.push(row.date);
+      return `  - ${row.date}(実行日+${daysAhead}日、シフトタブテスト専用の月 → 行ごと削除)`;
     }
-  }
+    toClearDate.push(row.date);
+    return `  - ${row.date}(通常運用の範囲内 → メモだけ元に戻す。営業時間等はそのまま)`;
+  });
+  logList(lines, (line) => line);
 
   if (!APPLY) return;
 
@@ -167,16 +187,16 @@ async function cleanupStaffShiftNotes() {
   console.log(`■ シフトのテスト用メモ: ${data.length}件`);
   const toDeleteRow = [];
   const toClearRow = [];
-  for (const row of data) {
+  const lines = data.map((row) => {
     const daysAhead = Math.round((new Date(row.date) - today) / 86400000);
     if (daysAhead > FAR_FUTURE_DAYS) {
-      console.log(`  - ${row.date}(実行日+${daysAhead}日、シフトタブテスト専用の月 → 行ごと削除)`);
       toDeleteRow.push(row.id);
-    } else {
-      console.log(`  - ${row.date}(通常運用の範囲内 → メモとテスト用休憩時間だけ元に戻す。稼働可否はそのまま)`);
-      toClearRow.push(row.id);
+      return `  - ${row.date}(実行日+${daysAhead}日、シフトタブテスト専用の月 → 行ごと削除)`;
     }
-  }
+    toClearRow.push(row.id);
+    return `  - ${row.date}(通常運用の範囲内 → メモとテスト用休憩時間だけ元に戻す。稼働可否はそのまま)`;
+  });
+  logList(lines, (line) => line);
 
   if (!APPLY) return;
 
@@ -204,6 +224,7 @@ async function cleanupOrphanLegacyMenus() {
 
   console.log(`■ 非公開メニュー(旧セットメニュー等): ${menus.length}件`);
   const deletable = [];
+  const menuLines = [];
   for (const m of menus) {
     const { count, error: cntErr } = await client
       .from('reservation_items')
@@ -211,12 +232,14 @@ async function cleanupOrphanLegacyMenus() {
       .eq('menu_id', m.id);
     if (cntErr) throw new Error(`reservation_items集計に失敗: ${cntErr.message}`);
     if ((count ?? 0) > 0) {
-      console.log(`  - ${m.name}(実際の予約から${count}件参照されているため削除不可。掲載終了のまま残す)`);
+      menuLines.push(`  - ${m.name}(実際の予約から${count}件参照されているため削除不可。掲載終了のまま残す)`);
     } else {
-      console.log(`  - ${m.name}(参照0件 → 削除可能)`);
+      menuLines.push(`  - ${m.name}(参照0件 → 削除可能)`);
       deletable.push(m);
     }
   }
+  // 1件ごとに非同期の集計を挟むため、表示の絞り込み(logList)は全件の収集が終わった後にまとめて行う。
+  logList(menuLines, (line) => line);
 
   if (!APPLY || deletable.length === 0) return;
 
@@ -247,7 +270,7 @@ async function cleanupOrphanTestAuthUsers() {
     return;
   }
   console.log(`■ テスト用ログインユーザーの孤児(スタッフに未紐付け): ${orphans.length}件`);
-  for (const u of orphans) console.log(`  - ${u.email}(${u.id})`);
+  logList(orphans, (u) => `  - ${u.email}(${u.id})`);
 
   if (!APPLY) return;
 
@@ -274,5 +297,10 @@ async function run() {
 
 run().catch((err) => {
   console.error('エラー:', err.message);
-  process.exit(1);
+  // process.exit(1)で即座に強制終了すると、Supabaseクライアントが裏で持っている非同期ハンドル
+  // (未使用でも内部的に張られるコネクション等)とのタイミングが重なり、Windows環境でNodeが
+  // 素性の分からないクラッシュ("Assertion failed: ...uv_handle...")を吐いて本来のエラー内容が
+  // 埋もれることがある(2026-09-30、実機で確認)。exitCodeを設定するだけにして、後始末を
+  // イベントループに任せて自然終了させれば、この副作用が起きない。
+  process.exitCode = 1;
 });
