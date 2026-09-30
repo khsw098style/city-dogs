@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+
+# 🏪 店舗固有・ドメイン依存: 独自ドメイン確定後、以下のSitemap行を追加すること
+# (sitemap.xml自体も独自ドメイン確定後に作成する。絶対URLが必須のため今は作成していない)
+# Sitemap: https://<独自ドメイン>/sitemap.xml

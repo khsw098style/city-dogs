@@ -273,3 +273,11 @@ E2Eは電話予約の代理登録で作った予約・顧客を意図的に後�
 
 ### 🐛 LP側(reserve.e2e.mjs)の「1.5」E2Eがコンソールエラーで失敗(2026-09-30)
 admin側の「9.5」を修正しグリーン確認後、LP側の同等チェック(手順1.5)で「コンソールエラーが発生しました: Failed to load resource: the server responded with a status of 409 ()」により失敗。原因はこのファイルに既存だった「不正なmanage_tokenでのアクセス」チェックと全く同じ構造の見落としだった。手順1.5で追加した`GET /availability`への確認用fetchは、対応不可なスタッフ×メニューの組み合わせに対して意図的に409(`STAFF_MENU_MISMATCH`)を返させて検証する設計だが、ブラウザは`fetch()`が非2xxを返すとアプリ側でcatchしているかに関わらず「リソース読み込み失敗」として無条件にconsole.errorへ出力する。このテストは末尾で`consoleErrors.length > 0`を失敗条件にしているため、想定通りの409であっても素通しできず失敗していた。**修正**: 既存の不正token確認(`errorsBeforeInvalidTokenCheck`)と全く同じパターン(fetch呼び出し直前に`consoleErrors.length`を退避し、期待した結果を確認できた直後に退避値へ戻すことで、間にその他の予期しないエラーが起きていないかのチェックは保ったまま、意図的に起こした1件だけを記録から除外する)を、追加した409チェックにも適用して解消。**教訓: 「ブラウザ側のfetchで意図的に非2xxを起こして検証する」E2Eを新規に書く時は、このファイルに既に同種のパターンと対策があることを前提に、同じ抑制処理を最初から組み込むこと(見落として初めて気づく、を繰り返さないため)。**
+
+### LPのSEO基礎対応(ドメイン非依存分のみ)を追加(2026-09-30)
+「今のLPはSEO対策できてる?Googleに拾ってもらえる?」との質問を受けて確認したところ、`<title>`・meta descriptionはあったが、OGP・Twitterカード・構造化データ(JSON-LD)・`robots.txt`が一切無かった。独自ドメイン未確定(暫定`*.workers.dev`URL)のため絶対URLが要る`sitemap.xml`・`canonical`タグ・Search Console登録は今回は見送り、ドメインに依存しない範囲だけ先に対応した。
+- **`lp/index.html`**: OGP(`og:type`/`og:site_name`/`og:locale`/`og:title`/`og:description`/`og:url`/`og:image`)・`twitter:card`・JSON-LD(`@type: HairSalon`、住所・電話・営業時間・Instagramの`sameAs`)を追加。`og:url`/`og:image`/JSON-LDの`url`/`image`は独自ドメイン未確定のため暫定的に現行の`city-dogs.khs-w098style.workers.dev`を指定(ドメイン確定後に差し替え必須、コメントで明記)。
+- **`openingHoursSpecification`の既知の制約**: schema.orgには「第4日曜定休」のような月次パターンの繰り返し休業を表す標準プロパティが無いため、「毎週月曜定休」のみ`dayOfWeek`から除外する形で反映し、第4日曜の例外は構造化データには含めていない(コメントで明記。一次情報は本文の「ACCESS & INFO」セクション)。
+- **`lp/robots.txt`を新規作成**: `Allow: /`のみ(絶対URLが要る`Sitemap:`行は独自ドメイン確定後に追記予定のためコメントで残した)。`lp/.assetsignore`に含まれていないため配信対象になることを確認済み。
+- **ドメイン確定後の残作業をCLAUDE.mdに追記**(「独自ドメイン確定後に必ずやること」): `og:url`/`og:image`/JSON-LDの`url`/`image`の本番ドメインへの差し替え、`sitemap.xml`新規作成、`robots.txt`への`Sitemap:`行追記、`canonical`タグ追加、Google Search Console登録。
+- **確認**: JSON-LDブロックを`JSON.parse()`で構文検証(パース成功)。機能に影響する変更(既存のfetch呼び出し・レイアウト等)は無いため、E2E・単体テストへの影響なし。

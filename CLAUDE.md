@@ -171,6 +171,7 @@ SUPABASE_SERVICE_ROLE_KEY=<Project Settings > API のservice_roleキー> npm run
 - **モバイル優先**: LP・予約フロー(`index.html`/`reserve.html`/`manage.html`)はスマホ利用が大多数の想定。変更時は必ずモバイル幅での見た目を優先して確認すること。管理画面(`booking/admin/`)はPC専用でよい(スタッフはPC/タブレットから利用)
 - **予約管理リンク(`manage_token`方式)は実装済みだが実運用不可**: `MANAGE_PAGE_BASE_URL`が独自ドメイン未確定のため未設定。設定するまでメール内リンクは`https://your-domain-not-configured.example/manage.html`というプレースホルダーのまま送信される
 - **独自ドメイン確定後に必ずやること**: `ALLOWED_ORIGINS`・`MANAGE_PAGE_BASE_URL`・`RESEND_FROM_ADDRESS`のsecretを新ドメインの値に更新(TEMPLATE.md参照)。**ローカルE2Eテスト用のlocalhostオリジン(`http://localhost:5500`/`5501`/`5502`)は`ALLOWED_ORIGINS`に残すこと**(消すと既存のテストスイートが壊れる)
+- **独自ドメイン確定後にやるSEO関連の残作業(2026-09-30追加)**: `lp/index.html`の`og:url`/`og:image`/JSON-LDの`url`/`image`を暫定のworkers.dev URLから本番ドメインへ差し替え。`lp/sitemap.xml`を新規作成し、`lp/robots.txt`に`Sitemap:`行を追記。`<link rel="canonical">`を追加。Google Search Consoleにプロパティ登録・sitemap送信。詳細はCHANGELOG.md参照
 - **メニューは区分(カット/カラー/パーマ/オプション)付きの複数選択制(2026-09-24)**: 予約は`reservation_items`に内訳を持ち、料金・時間は単純合算。所要時間は店舗回答(2026-09-25)反映済み。施術後のインターバルは「不要」と確認済みなので実装しない。パーマ・ツイストは併用可(カット・カラーは各1つまで)。詳細はCHANGELOG.md
 - **「〜」付きメニューの実際の会計金額(2026-09-25)**: 予約編集画面で「会計完了」にする時に実際の金額を入力(`reservations.final_price`、「〜」付きを含む予約は必須)。売上の見込み・実績はこの金額を優先。詳細はCHANGELOG.md
 - **スタッフ×メニューの対応可否(2026-09-30)**: 「大城さんはこのメニュー不可」のような例外を、除外リスト方式(`staff_menu_exclusions`。行が無ければ全メニュー対応可能)で管理できる。設定は管理画面のLPコンテンツ > STAFFカード。サーバー側は`GET /availability`等で必ず再検証する(`STAFF_MENU_MISMATCH`)。詳細はCHANGELOG.md
