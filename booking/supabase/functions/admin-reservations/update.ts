@@ -4,6 +4,7 @@ import { computeSlotsForDuration, jstDateOf } from "../_shared/availability.ts";
 import { parseTstzRange } from "../_shared/range.ts";
 import { isValidUuid, requireNonEmptyString } from "../_shared/validation.ts";
 import { resolveFinalPrice } from "../_shared/checkout.ts";
+import { assertStaffCanPerformMenus } from "../_shared/staffMenuCapability.ts";
 
 interface UpdateReservationBody {
   status?: string;
@@ -68,6 +69,19 @@ export async function updateReservation(
     }
     if (newStartAt.getTime() <= Date.now()) {
       throw new ApiError("VALIDATION_ERROR", "過去の日時には変更できません。");
+    }
+
+    // 担当を変更する場合、変更先のスタッフがこの予約のメニュー(複数選択の内訳)全部に
+    // 対応できるかを確認する(migrations/0015・_shared/staffMenuCapability.ts)。担当を
+    // 変えない場合(日時だけの変更)はチェック不要(元々対応できていたはずのため)。
+    if (body.staff_id !== undefined) {
+      const { data: items, error: itemsErr } = await client
+        .from("reservation_items")
+        .select("menu_id")
+        .eq("reservation_id", id);
+      if (itemsErr) throw new ApiError("INTERNAL_ERROR", "予約のメニュー情報の取得に失敗しました。");
+      const menuIds = (items ?? []).map((i) => i.menu_id as string);
+      if (menuIds.length > 0) await assertStaffCanPerformMenus(client, newStaffId, menuIds);
     }
 
     // 変更対象の予約自身を「既存予約との重なり」判定から除外しないと、変更前の時間帯が

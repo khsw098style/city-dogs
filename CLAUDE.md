@@ -44,7 +44,7 @@
 
 | レイヤー | 技術 | 備考 |
 |----------|------|------|
-| データベース | PostgreSQL(Supabase) | スキーマは [booking/supabase/migrations/](./booking/supabase/migrations/)(0001〜0014) |
+| データベース | PostgreSQL(Supabase) | スキーマは [booking/supabase/migrations/](./booking/supabase/migrations/)(0001〜0015) |
 | API | Supabase Edge Functions(Deno/TypeScript) | テーブルへの直接アクセス(PostgREST自動API)は使わず必ずこの層を経由。設計は [booking/design/api-design.md](./booking/design/api-design.md)。全テーブルRLS有効化済み(ポリシーなし、service_roleのみアクセス可) |
 | 認証(予約管理画面) | Supabase Auth(email/password)。`staff.auth_user_id`でstaffと紐付け | `_shared/auth.ts`のrequireStaff()で検証。顧客側(公開API)は認証なし |
 | 予約管理画面(`booking/admin/`) | HTML / CSS / Vanilla JS(ESモジュール) + `@supabase/supabase-js`(CDN) | スタッフ・オーナー向け内部ツール。予約管理・LPコンテンツ編集・営業日/シフト設定・顧客管理まですべて実装済み(api-design.md記載の機能はすべて完了)。`js/`はタブ・機能ごとに`core.js`等へ分割済み(2026-09-29、ビルドツールなしでネイティブESモジュールを使用) |
@@ -111,7 +111,7 @@ city-dogs/
     └── supabase/
         ├── README.md             # セットアップ・デプロイ手順
         ├── seed.sql              # 🏪店舗固有: 動作確認用テストデータ
-        ├── migrations/           # 0001〜0014(詳細はCHANGELOG.md、内容はマイグレーションファイル自体を参照)
+        ├── migrations/           # 0001〜0015(詳細はCHANGELOG.md、内容はマイグレーションファイル自体を参照)
         └── functions/
             ├── deno.json
             ├── _shared/          # 空き枠計算・認証・range解析・バリデーション・メール送信等。*.test.ts同居
@@ -173,6 +173,7 @@ SUPABASE_SERVICE_ROLE_KEY=<Project Settings > API のservice_roleキー> npm run
 - **独自ドメイン確定後に必ずやること**: `ALLOWED_ORIGINS`・`MANAGE_PAGE_BASE_URL`・`RESEND_FROM_ADDRESS`のsecretを新ドメインの値に更新(TEMPLATE.md参照)。**ローカルE2Eテスト用のlocalhostオリジン(`http://localhost:5500`/`5501`/`5502`)は`ALLOWED_ORIGINS`に残すこと**(消すと既存のテストスイートが壊れる)
 - **メニューは区分(カット/カラー/パーマ/オプション)付きの複数選択制(2026-09-24)**: 予約は`reservation_items`に内訳を持ち、料金・時間は単純合算。所要時間は店舗回答(2026-09-25)反映済み。施術後のインターバルは「不要」と確認済みなので実装しない。パーマ・ツイストは併用可(カット・カラーは各1つまで)。詳細はCHANGELOG.md
 - **「〜」付きメニューの実際の会計金額(2026-09-25)**: 予約編集画面で「会計完了」にする時に実際の金額を入力(`reservations.final_price`、「〜」付きを含む予約は必須)。売上の見込み・実績はこの金額を優先。詳細はCHANGELOG.md
+- **スタッフ×メニューの対応可否(2026-09-30)**: 「大城さんはこのメニュー不可」のような例外を、除外リスト方式(`staff_menu_exclusions`。行が無ければ全メニュー対応可能)で管理できる。設定は管理画面のLPコンテンツ > STAFFカード。サーバー側は`GET /availability`等で必ず再検証する(`STAFF_MENU_MISMATCH`)。詳細はCHANGELOG.md
 - **staff.roleは当面、店舗スタッフ(owner/stylist/assistant)間の管理APIの認可には使わない(全スタッフ同権限)と決定済み(2026-09-18。例外は閲覧専用の`maintainer`のみ、上記)**: スタイリスト2名+アシスタント1名程度の運用規模であれば権限差別化の必要性が薄いため。`staff.role`列自体はLP表示用(紹介文・指名リストの絞り込み)にそのまま使う。将来差別化したくなった場合もスキーマ変更は不要で、`_shared/auth.ts`に`requireOwner()`のような認可ヘルパーを追加するだけで対応できる(ただしオーナーの実ログインが現状スタイリストのstaffレコードに仮で紐付いている状態なので、先にオーナー専用staffレコードを分離する必要がある)
 - **保守用アカウント(`staff.role = 'maintainer'`、2026-09-28)**: 納品後の不具合・データ調査用の**閲覧専用**ログイン。管理APIの書き込み(POST/PUT/PATCH/DELETE)は`_shared/auth.ts`の`requireStaff()`で一括拒否(403)。店舗スタッフではないので、スケジュール列・シフト・指名リスト・LP紹介・LPコンテンツのスタッフ一覧・売上集計には出さない(`_shared/staffRoles.ts`)。店舗側の管理画面からは作成・変更できない(Authユーザー作成→staff行を`role='maintainer'`・稼働中で作成→`auth_user_id`紐付けを、開発者がDB側で行う)。オーナーには「調査目的の閲覧のみ・変更不可」と事前に説明すること(顧客情報は閲覧できるため)
 - **管理画面のタブ表示切替(2026-09-28)**: `booking/admin/js/config.js`の`ENABLED_TABS`で、店舗ごとに不要なタブを`false`にして非表示にできる(納品前に開発者が編集する運用。DBには持たない。キー未指定は表示)

@@ -107,6 +107,19 @@ async function run() {
     page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
     page.on('pageerror', (err) => consoleErrors.push('pageerror: ' + err.message));
 
+    // SUPABASE_SERVICE_ROLE_KEYがあれば、manage.html確認とスタッフ×メニューの対応可否の
+    // 両方でservice_roleクライアントを使う(1つ作って使い回す)。
+    const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    let admin = null;
+    if (SERVICE_ROLE_KEY) {
+      const { createClient } = await import('@supabase/supabase-js');
+      admin = createClient(
+        'https://cwojmmrnhvemupxubtus.supabase.co',
+        SERVICE_ROLE_KEY,
+        { auth: { persistSession: false } },
+      );
+    }
+
     // 本番用のTurnstileサイトキー(config.js)は実際のボット検知を行うため、Playwrightの
     // ヘッドレスブラウザは正当にボットとして弾かれてしまい、トークンが永久に発行されない
     // (実機で確認済み: 2026-09-16、本番キーへの切り替え直後にE2Eがタイムアウトした)。
@@ -125,6 +138,72 @@ async function run() {
     await page.goto(`${BASE_URL}/reserve.html`);
     await page.waitForSelector('.option-card', { timeout: 10000 });
     await page.screenshot({ path: path.join(shotDir, '1-menu.png') });
+
+    // スタッフ×メニューの対応可否(除外リスト方式、2026-09-30〜)。実際にデプロイ済みの
+    // GET /staff(menu_idsフィルタ)・GET /availability(STAFF_MENU_MISMATCH)を、
+    // ブラウザの実際のfetch経由(window.CITY_DOGS_CONFIGの実キー)で確認する。
+    // ウィザードの本流(メニュー選択→予約完了)とは独立させ、テスト用の除外設定は
+    // 必ずfinallyで削除する(このデータは実在するスタッフ・メニューを一時的に操作するため)。
+    if (admin) {
+      console.log('スタッフ×メニューの対応可否(GET /staffのmenu_idsフィルタ・GET /availabilityの拒否)を確認...');
+      const { data: colorMenu, error: colorMenuErr } = await admin
+        .from('menus').select('id, name').eq('name', 'カラー').eq('is_active', true).maybeSingle();
+      if (colorMenuErr || !colorMenu) throw new Error(`テスト用メニュー(カラー)の取得に失敗: ${colorMenuErr?.message}`);
+
+      const fetchStaffFor = (menuId) => page.evaluate(async (id) => {
+        const cfg = window.CITY_DOGS_CONFIG;
+        const res = await fetch(`${cfg.SUPABASE_URL}/functions/v1/staff?menu_ids=${id}`, {
+          headers: { Authorization: `Bearer ${cfg.ANON_KEY}` },
+        });
+        return (await res.json()).staff;
+      }, menuId);
+
+      const beforeStaff = await fetchStaffFor(colorMenu.id);
+      if (beforeStaff.length < 2) {
+        console.log(`   稼働中のスタイリストが${beforeStaff.length}名のため、絞り込みの効果確認はスキップします(2名以上必要)。`);
+      } else {
+        const targetStaff = beforeStaff[0];
+        const { error: insErr } = await admin
+          .from('staff_menu_exclusions').insert({ staff_id: targetStaff.id, menu_id: colorMenu.id });
+        if (insErr) throw new Error(`テスト用の除外登録に失敗: ${insErr.message}`);
+        try {
+          const afterStaff = await fetchStaffFor(colorMenu.id);
+          if (afterStaff.some((s) => s.id === targetStaff.id)) {
+            throw new Error(`除外設定した「${targetStaff.name}」が、GET /staffの絞り込み後も一覧に残っています。`);
+          }
+          if (afterStaff.length !== beforeStaff.length - 1) {
+            throw new Error(`除外後のスタッフ数が想定と異なります(除外前${beforeStaff.length}件、除外後${afterStaff.length}件)。`);
+          }
+
+          // 意図的に409(STAFF_MENU_MISMATCH)を発生させるfetchなので、ブラウザは「リソース読み込み失敗」
+          // としてconsole.errorに出す(下のmanage.html不正トークンの確認と同じ理由)。この期待済みの
+          // エラーは記録から除外する。
+          const errorsBeforeMismatchCheck = consoleErrors.length;
+          const availResult = await page.evaluate(async ({ menuId, staffId }) => {
+            const cfg = window.CITY_DOGS_CONFIG;
+            const d = new Date();
+            d.setDate(d.getDate() + 3);
+            const date = d.toISOString().slice(0, 10);
+            const res = await fetch(
+              `${cfg.SUPABASE_URL}/functions/v1/availability?date=${date}&menu_ids=${menuId}&staff_id=${staffId}`,
+              { headers: { Authorization: `Bearer ${cfg.ANON_KEY}` } },
+            );
+            return { status: res.status, body: await res.json() };
+          }, { menuId: colorMenu.id, staffId: targetStaff.id });
+          consoleErrors.length = errorsBeforeMismatchCheck;
+          if (availResult.status !== 409 || availResult.body.error?.code !== 'STAFF_MENU_MISMATCH') {
+            throw new Error(`対応不可の組み合わせでGET /availabilityを叩いても、STAFF_MENU_MISMATCH(409)になりません: status=${availResult.status}, body=${JSON.stringify(availResult.body)}`);
+          }
+          console.log(`   「${targetStaff.name}」を「カラー」に対応不可として登録 → GET /staffの絞り込み・GET /availabilityの拒否の両方を確認しました。`);
+        } finally {
+          const { error: delErr } = await admin
+            .from('staff_menu_exclusions').delete().eq('staff_id', targetStaff.id).eq('menu_id', colorMenu.id);
+          if (delErr) throw new Error(`テスト用の除外設定の削除に失敗しました(手動確認が必要): ${delErr.message}`);
+        }
+      }
+    } else {
+      console.log('SUPABASE_SERVICE_ROLE_KEY が未設定のため、スタッフ×メニューの対応可否のテストはスキップしました。');
+    }
 
     // STEP 1: メニュー選択(複数選択: カット + 顔剃り。2026-09-24〜、カット/カラー/パーマ+オプションの組み合わせ選択)
     const card = (name) => page.locator('.option-card', { has: page.locator('h3', { hasText: new RegExp('^' + name + '$') }) });
@@ -168,7 +247,9 @@ async function run() {
 
     // STEP 2: 担当スタイリストを指名する(先頭の実オプションを選ぶ。2026-09-18〜指名は必須)。
     // これにより GET /availability?staff_id=... と POST /reservations の staff_id 連携を確認する。
-    await page.waitForFunction(() => document.querySelectorAll('#staffSelect option').length > 1, { timeout: 10000 });
+    // waitForFunction(fn, { timeout })の2引数形式は第2引数がargとして扱われ、指定したtimeoutが
+    // 適用されず既定の30000msになる(実機の挙動で確認済み、2026-09-30)。argにundefinedを明示する。
+    await page.waitForFunction(() => document.querySelectorAll('#staffSelect option').length > 1, undefined, { timeout: 10000 });
     await page.selectOption('#staffSelect', { index: 1 });
     const selectedStaffName = await page.locator('#staffSelect option:checked').innerText();
     console.log('指名したスタイリスト:', selectedStaffName);
@@ -207,7 +288,7 @@ async function run() {
     await page.waitForFunction(() => {
       const input = document.querySelector('input[name="cf-turnstile-response"]');
       return input && input.value;
-    }, { timeout: 15000 });
+    }, undefined, { timeout: 15000 });
     await page.click('#submitBtn');
     await page.waitForSelector('#stepResult.is-active', { timeout: 10000 });
     await page.waitForTimeout(300);
@@ -232,14 +313,8 @@ async function run() {
     // SUPABASE_SERVICE_ROLE_KEY があれば、manage.html(予約確認・キャンセル専用ページ)も
     // 通しで確認する。manage_tokenは公開APIのレスポンスに含まれない(メール本文にのみ載る)ため、
     // service_role経由で直接取得する必要がある。
-    if (reservationNumber && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    if (reservationNumber && admin) {
       console.log('manage.html(予約確認・キャンセルページ)を確認...');
-      const { createClient } = await import('@supabase/supabase-js');
-      const admin = createClient(
-        'https://cwojmmrnhvemupxubtus.supabase.co',
-        process.env.SUPABASE_SERVICE_ROLE_KEY,
-        { auth: { persistSession: false } },
-      );
       const { data: row, error } = await admin
         .from('reservations')
         .select('id, manage_token, price_at_booking, time_range')

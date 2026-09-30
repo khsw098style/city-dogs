@@ -482,14 +482,19 @@ function renderMenuCards(menus) {
 async function loadStaffBios() {
   el.staffBioCards.innerHTML = '<p class="status-text">読み込み中…</p>';
   try {
-    const data = await apiFetch('admin-site-content', '/staff');
-    renderStaffBioCards(data.staff);
+    // 「対応できないメニュー」のチェックボックスに使う、公開中のメニュー一覧もあわせて取得する。
+    const [staffData, menuData] = await Promise.all([
+      apiFetch('admin-site-content', '/staff'),
+      apiFetch('admin-menus', ''),
+    ]);
+    const activeMenus = (menuData.menus ?? []).filter((m) => m.is_active);
+    renderStaffBioCards(staffData.staff, activeMenus);
   } catch (err) {
     el.staffBioCards.innerHTML = `<p class="status-text">取得に失敗しました: ${escapeHtml(err.message)}</p>`;
   }
 }
 
-function renderStaffBioCards(staffList) {
+function renderStaffBioCards(staffList, activeMenus) {
   if (!staffList || staffList.length === 0) {
     el.staffBioCards.innerHTML = '<p class="status-text">スタッフが登録されていません。</p>';
     return;
@@ -518,6 +523,16 @@ function renderStaffBioCards(staffList) {
         </div>
       </div>
       <input type="hidden" class="f-avatar" value="${escapeHtml(s.avatar_image_url ?? '')}">
+      <div class="field">
+        <label>対応できないメニュー(予約時の担当選択・空き枠から自動的に除外されます)</label>
+        ${activeMenus.length === 0 ? '<p class="status-text">公開中のメニューがありません。</p>' : `
+          <div class="checkbox-grid">
+            ${activeMenus.map((m) => `
+              <label><input type="checkbox" class="f-excluded-menu" value="${m.id}" ${(s.excluded_menu_ids ?? []).includes(m.id) ? 'checked' : ''}> ${escapeHtml(m.name)}</label>
+            `).join('')}
+          </div>
+        `}
+      </div>
       <div class="content-card-actions">
         <button type="button" class="btn btn-primary btn-small save-btn">保存</button>
         <button type="button" class="btn btn-ghost btn-small delete-btn">削除</button>
@@ -549,6 +564,7 @@ function renderStaffBioCards(staffList) {
             bio_role_label: card.querySelector('.f-role-label').value.trim(),
             bio_comment: card.querySelector('.f-comment').value.trim(),
             avatar_image_url: newAvatar,
+            excluded_menu_ids: [...card.querySelectorAll('.f-excluded-menu:checked')].map((c) => c.value),
           },
         });
         if (newAvatar !== previousAvatar) {

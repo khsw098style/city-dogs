@@ -214,19 +214,50 @@
   // 担当スタイリストの指名は必須(2026-09-18〜、「指名なし」は廃止)。
   // 取得に失敗する/1人も出てこない場合は選択そのものができず予約を続行できないため、
   // その旨をプルダウンに表示してブロックする。
-  async function loadStaffList() {
+  // menuIdsを渡すと、選んだメニュー全部に対応できるスタイリストだけに絞る
+  // (_shared/staffMenuCapability.ts、2026-09-30〜)。最終防御はGET /availability・
+  // POST /reservations側のサーバー再検証なので、ここでの絞り込みは選択肢を親切にする目的。
+  // それまで選んでいた担当が新しい絞り込みでも引き続き選べる場合は選択を維持する
+  // (日時はel.staffSelectのchangeハンドラと同じく担当をまたいで保持してよい値のため、
+  // ここで無条件にリセットしない)。維持できない場合だけ選び直しにし、既存の空き枠(担当が
+  // 変わり得るため)をリセットする。
+  async function loadStaffList(menuIds) {
+    const previousStaffId = state.selectedStaffId;
     try {
-      const data = await apiFetch('/staff');
+      const query = menuIds && menuIds.length > 0 ? `?menu_ids=${menuIds.join(',')}` : '';
+      const data = await apiFetch(`/staff${query}`);
       state.staffList = data.staff || [];
       if (state.staffList.length === 0) {
-        el.staffSelect.innerHTML = '<option value="" disabled selected>現在ご案内できるスタイリストがいません</option>';
-        return;
+        el.staffSelect.innerHTML = '<option value="" disabled selected>選んだメニューに対応できるスタイリストがいません。お電話にてお問い合わせください。</option>';
+        state.selectedStaffId = '';
+      } else {
+        el.staffSelect.innerHTML = '<option value="" disabled selected>選択してください</option>';
+        renderStaffOptions();
+        const stillValid = previousStaffId && state.staffList.some((s) => s.id === previousStaffId);
+        if (stillValid) {
+          el.staffSelect.value = previousStaffId;
+          state.selectedStaffId = previousStaffId;
+        } else {
+          state.selectedStaffId = '';
+        }
       }
-      renderStaffOptions();
+      if (!stillValidSelection(previousStaffId, state.selectedStaffId)) {
+        state.selectedSlot = null;
+        el.toStep3.disabled = true;
+      }
     } catch (err) {
       console.error('スタッフ一覧の取得に失敗しました:', err.message);
       el.staffSelect.innerHTML = '<option value="" disabled selected>取得に失敗しました。再読み込みしてください</option>';
+      state.selectedStaffId = '';
+      state.selectedSlot = null;
+      el.toStep3.disabled = true;
     }
+  }
+
+  // previousとcurrentが同じ(空文字同士含む)かどうか。loadStaffList内で、担当の選択状況が
+  // 変わった時だけ空き枠(selectedSlot)をリセットするための判定。
+  function stillValidSelection(previous, current) {
+    return previous === current && previous !== '';
   }
 
   function renderStaffOptions() {
@@ -360,7 +391,12 @@
 
   el.toStep2.addEventListener('click', () => {
     showStep(2);
-    if (el.dateInput.value) loadAvailability(el.dateInput.value);
+    // ステップ1で選んだメニューが確定したので、そのメニュー全部に対応できるスタイリストだけに
+    // 絞り込む(2026-09-30〜)。それまで選んでいた担当がまだ選べるなら維持し、日時もそのまま
+    // 再利用する(loadStaffList内の判定)。
+    loadStaffList(getSelection().ids).then(() => {
+      if (el.dateInput.value) loadAvailability(el.dateInput.value);
+    });
   });
 
   // ---------------------------------------------------------------

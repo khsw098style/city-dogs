@@ -3,6 +3,7 @@ import { ApiError } from "./http.ts";
 import { parseTstzRange } from "./range.ts";
 import { loadMenuSelection, type MenuSelection } from "./menuSelection.ts";
 import { NON_BOOKABLE_ROLES } from "./staffRoles.ts";
+import { assertStaffCanPerformMenus } from "./staffMenuCapability.ts";
 
 // GET /availability と POST /reservations(サーバー側の再検証)の両方から呼ばれる、
 // 空き枠計算の唯一の実装。api-design.mdの「GET /availability」節のロジックに対応する。
@@ -190,6 +191,13 @@ export async function computeAvailability(
 ): Promise<AvailabilityResult> {
   const { menuIds, ...rest } = params;
   const selection = await loadMenuSelection(client, menuIds);
+
+  // スタッフ×メニューの対応可否(migrations/0015、_shared/staffMenuCapability.ts)。
+  // ここでの検証がGET /availability・POST /reservations・POST /admin-reservationsの
+  // すべてに効く(いずれもcomputeAvailability経由のため)。リスケジュール(担当のみ変更・
+  // 日時はそのまま等)はcomputeSlotsForDurationを直接使うため、admin-reservations/update.tsで
+  // 別途検証している。
+  await assertStaffCanPerformMenus(client, rest.staffId, selection.items.map((item) => item.id));
 
   const { closed, slots } = await computeSlotsForDuration(client, {
     ...rest,

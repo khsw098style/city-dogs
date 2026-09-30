@@ -342,10 +342,13 @@ async function run() {
     // Cloudflare Turnstileのトークン生成は非同期(テスト用サイトキーでは数秒で完了する)。
     // 生成前にクリックすると「ロボットでないことの確認が完了していません」で弾かれるため、
     // 固定waitではなくトークンが入るまで待つ(reserve.e2e.mjsと同じ理由)。
+    // 🐛 waitForFunction(fn, { timeout })の2引数形式は第2引数がpageFunctionへのargとして扱われ、
+    // 指定したtimeoutが適用されず既定の30000msになる(実機の挙動で確認済み、2026-09-30)。
+    // 以下すべてargにundefinedを明示する3引数形式に統一する。
     await page.waitForFunction(() => {
       const input = document.querySelector('input[name="cf-turnstile-response"]');
       return input && input.value;
-    }, { timeout: 15000 });
+    }, undefined, { timeout: 15000 });
     await page.click('#loginSubmit');
     await page.waitForSelector('#appScreen:not([hidden])', { timeout: 10000 });
 
@@ -361,7 +364,7 @@ async function run() {
     });
     await page.click('.tab-btn[data-tab="search"]');
     // 初めて開いた時は、来店日(from)が本日になり、条件なしの全件ではなく「本日以降」が自動で検索される。
-    await page.waitForFunction(() => document.getElementById('searchResultMeta').textContent.length > 0, { timeout: 15000 });
+    await page.waitForFunction(() => document.getElementById('searchResultMeta').textContent.length > 0, undefined, { timeout: 15000 });
     const todayStr = formatDateLocal(new Date());
     const initialFrom = await page.inputValue('#searchDateFrom');
     if (initialFrom !== todayStr) {
@@ -425,7 +428,12 @@ async function run() {
     const { data: directEditCustomer, error: directEditCustErr } = await admin
       .from('customers').insert({ name: DIRECT_EDIT_CUSTOMER_NAME, phone: DIRECT_EDIT_PHONE }).select('id').single();
     if (directEditCustErr) throw new Error(`テスト用顧客の作成に失敗: ${directEditCustErr.message}`);
-    const directEditStart = new Date(Date.now() + 200 * 86400000); // 実行日+200日、他の予約と衝突しにくい遠い未来日
+    // 🐛 以前は実行日+200日にしていたが、business_daysの営業日データはseed.sqlが今日から
+    // 60日分しか生成しないため、その日付には営業日情報が無く「空き枠なし」扱いになり、
+    // 直後のeditSlotSelectの実オプション待ちが必ずタイムアウトしていた(2026-09-30、実機で発覚)。
+    // 手順10の電話予約(+14日)と同じ、確実に営業日データがある範囲の日付にする(時刻を変えて
+    // 予約自体の衝突は避けつつ、手順10側は空き枠を都度サーバーへ再確認するので衝突しても実害はない)。
+    const directEditStart = addDaysLocal(new Date(), 21);
     directEditStart.setHours(10, 0, 0, 0);
     const directEditEnd = new Date(directEditStart.getTime() + directEditMenu.duration_minutes * 60000);
     const { data: directEditReservation, error: directEditResErr } = await admin
@@ -453,21 +461,16 @@ async function run() {
     await page.locator('#editReservationModal').waitFor({ state: 'visible' });
     // リスケジュール欄の担当者は、キャッシュが無くても後から読み込み直されて現在の担当(staffRow)が
     // 選択されているはず。空き枠も「取得に失敗しました」ではなく実際の選択肢になっていることを確認する。
-    await page.waitForFunction(
-      () => document.getElementById('editStaffSelect')?.value,
-      { timeout: 10000 },
-    );
+    // waitForRealOptions()は「プレースホルダー以外の選択肢が現れるまで待つ」既存のヘルパー
+    // (手順10の#crStaff/#crSlot等で実績あり)で、自前でwaitForFunctionを書くより確実なのでこちらを使う
+    // (renderSlotOptions()は空き枠がある場合でも先頭に必ず<option value="">を足すため、
+    // 「1件目の値」で判定する自前ロジックは誤りやすい、2026-09-30に実機で発覚)。
+    await waitForRealOptions(page.locator('#editStaffSelect'));
     const directEditStaffValue = await page.inputValue('#editStaffSelect');
     if (directEditStaffValue !== staffRow.id) {
       throw new Error(`検索タブから直接開いた編集モーダルで、担当スタイリストが現在の担当(${staffRow.id})に選択されていません(実際: "${directEditStaffValue}")。`);
     }
-    await page.waitForFunction(
-      () => {
-        const el = document.getElementById('editSlotSelect');
-        return el && el.options.length > 0 && el.options[0].value !== '' && !el.parentElement.innerHTML.includes('読み込み中');
-      },
-      { timeout: 10000 },
-    );
+    await waitForRealOptions(page.locator('#editSlotSelect'));
     const directEditRescheduleErrorVisible = await page.locator('#editRescheduleError').isVisible();
     if (directEditRescheduleErrorVisible) {
       const errText = await page.locator('#editRescheduleError').innerText();
@@ -481,7 +484,7 @@ async function run() {
     await page.waitForSelector('#featureCards .content-card, #featureCards .status-text');
 
     console.log('5.5. 評価バッジ(★スコア・口コミ件数): 編集→保存→ページ再読み込みで反映確認...');
-    await page.waitForFunction(() => document.getElementById('ratingScoreInput')?.value !== '', { timeout: 10000 });
+    await page.waitForFunction(() => document.getElementById('ratingScoreInput')?.value !== '', undefined, { timeout: 10000 });
     const TEST_RATING_SCORE = '3.33';
     const TEST_RATING_COUNT = '777';
     await page.fill('#ratingScoreInput', TEST_RATING_SCORE);
@@ -495,7 +498,7 @@ async function run() {
     await page.waitForSelector('#appScreen:not([hidden])', { timeout: 10000 });
     await page.click('.tab-btn[data-tab="content"]');
     await page.waitForSelector('#featureCards .content-card, #featureCards .status-text');
-    await page.waitForFunction(() => document.getElementById('ratingScoreInput')?.value !== '', { timeout: 10000 });
+    await page.waitForFunction(() => document.getElementById('ratingScoreInput')?.value !== '', undefined, { timeout: 10000 });
     const reloadedScore = await page.inputValue('#ratingScoreInput');
     const reloadedCount = await page.inputValue('#ratingCountInput');
     if (Number(reloadedScore).toFixed(2) !== Number(TEST_RATING_SCORE).toFixed(2) || reloadedCount !== TEST_RATING_COUNT) {
@@ -592,6 +595,71 @@ async function run() {
     await card.locator('.delete-btn').click();
     await page.locator(`#staffBioCards .content-card[data-id="${staffBioCardId}"]`).waitFor({ state: 'detached', timeout: 10000 });
     console.log('   スタッフの追加・編集・削除を確認');
+
+    console.log('9.5. スタッフ×メニューの対応可否(除外リスト方式)を確認...');
+    {
+      // カットは手順10以降の電話予約テストで使うため、影響が出ないよう別のメニュー(カラー)を使う。
+      // GET /menusは公開中(is_active=true)のものしかそもそも返さない設計で、レスポンスに
+      // is_activeフィールド自体を含まない(menus/index.ts参照)。ここで && m.is_active を
+      // 条件に入れると常にundefined(falsy)になりfindが絶対にマッチしない、というミスを
+      // 実機で踏んだ(2026-09-30)。
+      const menusRes = await fetch(`${SUPABASE_URL}/functions/v1/menus`, { headers: { Authorization: `Bearer ${ANON_KEY}` } });
+      const targetMenu = (await menusRes.json()).menus.find((m) => m.name === 'カラー');
+      if (!targetMenu) throw new Error('テスト用メニュー(カラー)が見つかりません。');
+
+      await page.click('.tab-btn[data-tab="content"]');
+      const staffCard = page.locator(`#staffBioCards .content-card[data-id="${staffRow.id}"]`);
+      await staffCard.waitFor({ timeout: 10000 });
+      // content.jsのチェックボックスのラベルは<label><input ...> ${name}</label>で、input直後に
+      // 半角スペースが1つ入る。hasTextの正規表現は(文字列指定と違って)前後の空白を自動で
+      // 無視しないため、^...$で厳密一致させると常にマッチしない不具合を実機で踏んだ(2026-09-30)。
+      // \s*で前後の空白を許容する。
+      const targetCheckbox = staffCard.locator('.checkbox-grid label', { hasText: new RegExp('^\\s*' + targetMenu.name + '\\s*$') }).locator('.f-excluded-menu');
+      await targetCheckbox.check();
+      await staffCard.locator('.save-btn').click();
+      await waitForLocatorText(staffCard.locator('.save-status'), '保存しました');
+
+      try {
+        // 画面上の保存だけでなく、実際にDBへ反映されたことをservice_role経由で確認する。
+        const { data: exclusionRow, error: exclErr } = await admin
+          .from('staff_menu_exclusions').select('staff_id').eq('staff_id', staffRow.id).eq('menu_id', targetMenu.id).maybeSingle();
+        if (exclErr) throw new Error(`除外設定の確認に失敗: ${exclErr.message}`);
+        if (!exclusionRow) throw new Error('対応できないメニューのチェックを保存しても、staff_menu_exclusionsに反映されていません。');
+
+        const filteredRes = await fetch(`${SUPABASE_URL}/functions/v1/staff?menu_ids=${targetMenu.id}`, { headers: { Authorization: `Bearer ${ANON_KEY}` } });
+        const filteredStaff = (await filteredRes.json()).staff;
+        if (filteredStaff.some((s) => s.id === staffRow.id)) {
+          throw new Error(`対応不可に設定したはずの「${staffRow.name}」が、GET /staffの絞り込み後も一覧に残っています。`);
+        }
+
+        const d = new Date();
+        d.setDate(d.getDate() + 3);
+        const date = d.toISOString().slice(0, 10);
+        const availRes = await fetch(
+          `${SUPABASE_URL}/functions/v1/availability?date=${date}&menu_ids=${targetMenu.id}&staff_id=${staffRow.id}`,
+          { headers: { Authorization: `Bearer ${ANON_KEY}` } },
+        );
+        const availBody = await availRes.json();
+        if (availRes.status !== 409 || availBody.error?.code !== 'STAFF_MENU_MISMATCH') {
+          throw new Error(`対応不可の組み合わせでGET /availabilityを叩いても、STAFF_MENU_MISMATCH(409)になりません: status=${availRes.status}, body=${JSON.stringify(availBody)}`);
+        }
+        console.log(`   「${staffRow.name}」を「${targetMenu.name}」に対応不可として保存 → DB反映・GET /staffの絞り込み・GET /availabilityの拒否をすべて確認`);
+      } finally {
+        // 画面から元に戻す(チェックを外して保存)。
+        await targetCheckbox.uncheck();
+        await staffCard.locator('.save-btn').click();
+        await waitForLocatorText(staffCard.locator('.save-status'), '保存しました');
+        // 画面経由の後片付けが何らかの理由で反映されていない場合に備え、DB側でも直接確認・削除する
+        // (実在するスタッフの対応可否設定を汚したまま終わらせないための保険)。
+        const { data: remaining, error: remErr } = await admin
+          .from('staff_menu_exclusions').select('staff_id').eq('staff_id', staffRow.id).eq('menu_id', targetMenu.id).maybeSingle();
+        if (remErr) console.error(`   ⚠️ 除外設定の後片付け確認に失敗しました: ${remErr.message}`);
+        if (remaining) {
+          await admin.from('staff_menu_exclusions').delete().eq('staff_id', staffRow.id).eq('menu_id', targetMenu.id);
+          console.error('   ⚠️ 画面経由の後片付けが反映されていなかったため、直接DBから削除しました。');
+        }
+      }
+    }
 
     console.log('10. スケジュールタブへ戻り、電話予約を代理登録...');
     await page.click('.tab-btn[data-tab="schedule"]');
@@ -909,6 +977,7 @@ async function run() {
     async function waitForRevenueLoaded() {
       await page.waitForFunction(
         () => !document.getElementById('revenueArea')?.textContent.includes('読み込み中'),
+        undefined,
         { timeout: 15000 },
       );
     }

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { ApiError, jsonResponse } from "../_shared/http.ts";
 import { isValidUuid, requireNonEmptyString } from "../_shared/validation.ts";
 import { MAINTAINER_ROLE } from "../_shared/staffRoles.ts";
+import { fetchStaffMenuExclusions, groupExclusionsByStaff } from "../_shared/staffMenuCapability.ts";
 
 // 店舗側の管理画面から作成・変更できるロール。maintainer(保守用)はここに含めない
 // (保守用アカウントはDBで直接作成する。店舗のスタッフ管理画面には表示もしない)。
@@ -17,6 +18,9 @@ interface StaffBody {
   bio_role_label?: string | null;
   bio_comment?: string | null;
   avatar_image_url?: string | null;
+  // このスタッフが対応できないメニューのID一覧(migrations/0015、除外リスト方式)。
+  // 指定した配列で置き換える(部分更新ではない)。未指定なら変更しない。
+  excluded_menu_ids?: string[];
 }
 
 const SELECT_COLUMNS = "id, name, role, is_active, display_order, name_en, bio_role_label, bio_comment, avatar_image_url";
@@ -30,7 +34,16 @@ export async function listStaffBios(client: SupabaseClient, headers: HeadersInit
     .neq("role", MAINTAINER_ROLE)
     .order("display_order", { ascending: true });
   if (error) throw new ApiError("INTERNAL_ERROR", "スタッフ情報の取得に失敗しました。");
-  return jsonResponse({ staff: data }, { headers });
+
+  const staffList = data ?? [];
+  const exclusions = await fetchStaffMenuExclusions(client, staffList.map((s) => s.id));
+  const excludedByStaff = groupExclusionsByStaff(exclusions);
+  const staff = staffList.map((s) => ({
+    ...s,
+    excluded_menu_ids: [...(excludedByStaff.get(s.id) ?? [])],
+  }));
+
+  return jsonResponse({ staff }, { headers });
 }
 
 // POST /admin-site-content/staff — 新しいスタッフを追加する。
@@ -105,7 +118,29 @@ export async function updateStaffBio(id: string, req: Request, client: SupabaseC
     .maybeSingle();
   if (error) throw new ApiError("INTERNAL_ERROR", "スタッフ情報の更新に失敗しました。");
   if (!data) throw new ApiError("NOT_FOUND", "指定されたスタッフが見つかりません。");
-  return jsonResponse({ staff: data }, { headers });
+
+  // 対応できないメニュー(migrations/0015)。指定があれば、そのスタッフの除外行を丸ごと
+  // 置き換える(部分更新ではなく、チェックボックス一覧の現在の状態をそのまま反映する)。
+  let excludedMenuIds: string[] | undefined;
+  if (body.excluded_menu_ids !== undefined) {
+    const menuIds = Array.isArray(body.excluded_menu_ids)
+      ? body.excluded_menu_ids.filter((v): v is string => typeof v === "string" && v.length > 0)
+      : [];
+    const { error: delErr } = await client.from("staff_menu_exclusions").delete().eq("staff_id", id);
+    if (delErr) throw new ApiError("INTERNAL_ERROR", "対応できないメニューの更新に失敗しました。");
+    if (menuIds.length > 0) {
+      const { error: insErr } = await client
+        .from("staff_menu_exclusions")
+        .insert(menuIds.map((menuId) => ({ staff_id: id, menu_id: menuId })));
+      if (insErr) throw new ApiError("INTERNAL_ERROR", "対応できないメニューの更新に失敗しました。");
+    }
+    excludedMenuIds = menuIds;
+  } else {
+    const exclusions = await fetchStaffMenuExclusions(client, [id]);
+    excludedMenuIds = exclusions.map((e) => e.menu_id);
+  }
+
+  return jsonResponse({ staff: { ...data, excluded_menu_ids: excludedMenuIds } }, { headers });
 }
 
 function requireValidRole(role: string): StaffRole {

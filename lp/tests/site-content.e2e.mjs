@@ -74,8 +74,11 @@ async function run() {
     await page.goto(`${BASE_URL}/index.html`);
 
     // site-content.jsのfetchが終わるまで待つ(「読み込んでいます…」が消えるまで)
+    // waitForFunction(fn, { timeout })の2引数形式は第2引数がargとして扱われ、指定したtimeoutが
+    // 適用されず既定の30000msになる(実機の挙動で確認済み、2026-09-30)。argにundefinedを明示する。
     await page.waitForFunction(
       () => !document.querySelector('#featureGrid')?.textContent.includes('読み込んでいます'),
+      undefined,
       { timeout: 15000 },
     );
 
