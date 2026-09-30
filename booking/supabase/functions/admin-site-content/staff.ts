@@ -110,37 +110,31 @@ export async function updateStaffBio(id: string, req: Request, client: SupabaseC
   if (body.bio_comment !== undefined) patch.bio_comment = body.bio_comment?.trim() || null;
   if (body.avatar_image_url !== undefined) patch.avatar_image_url = body.avatar_image_url?.trim() || null;
 
-  const { data, error } = await client
-    .from("staff")
-    .update(patch)
-    .eq("id", id)
-    .select(SELECT_COLUMNS)
-    .maybeSingle();
+  // 入力を検証してからDBの1トランザクションでスタッフ本体と除外行を保存する。
+  // nullは「除外行を変更しない」、空配列は「すべて解除」を表す。
+  let menuIds: string[] | null = null;
+  if (body.excluded_menu_ids !== undefined) {
+    if (!Array.isArray(body.excluded_menu_ids) ||
+      body.excluded_menu_ids.some((value) => typeof value !== "string" || !isValidUuid(value)) ||
+      new Set(body.excluded_menu_ids).size !== body.excluded_menu_ids.length) {
+      throw new ApiError("VALIDATION_ERROR", "対応できないメニューの指定が不正です。");
+    }
+    menuIds = body.excluded_menu_ids;
+  }
+
+  const { data, error } = await client.rpc("update_staff_with_exclusions", {
+    p_staff_id: id,
+    p_patch: patch,
+    p_menu_ids: menuIds,
+  });
   if (error) throw new ApiError("INTERNAL_ERROR", "スタッフ情報の更新に失敗しました。");
   if (!data) throw new ApiError("NOT_FOUND", "指定されたスタッフが見つかりません。");
 
-  // 対応できないメニュー(migrations/0015)。指定があれば、そのスタッフの除外行を丸ごと
-  // 置き換える(部分更新ではなく、チェックボックス一覧の現在の状態をそのまま反映する)。
-  let excludedMenuIds: string[] | undefined;
-  if (body.excluded_menu_ids !== undefined) {
-    const menuIds = Array.isArray(body.excluded_menu_ids)
-      ? body.excluded_menu_ids.filter((v): v is string => typeof v === "string" && v.length > 0)
-      : [];
-    const { error: delErr } = await client.from("staff_menu_exclusions").delete().eq("staff_id", id);
-    if (delErr) throw new ApiError("INTERNAL_ERROR", "対応できないメニューの更新に失敗しました。");
-    if (menuIds.length > 0) {
-      const { error: insErr } = await client
-        .from("staff_menu_exclusions")
-        .insert(menuIds.map((menuId) => ({ staff_id: id, menu_id: menuId })));
-      if (insErr) throw new ApiError("INTERNAL_ERROR", "対応できないメニューの更新に失敗しました。");
-    }
-    excludedMenuIds = menuIds;
-  } else {
-    const exclusions = await fetchStaffMenuExclusions(client, [id]);
-    excludedMenuIds = exclusions.map((e) => e.menu_id);
-  }
+  const excludedMenuIds = menuIds ??
+    (await fetchStaffMenuExclusions(client, [id])).map((item) => item.menu_id);
+  const staff = Object.fromEntries(SELECT_COLUMNS.split(", ").map((key) => [key, data[key]]));
 
-  return jsonResponse({ staff: { ...data, excluded_menu_ids: excludedMenuIds } }, { headers });
+  return jsonResponse({ staff: { ...staff, excluded_menu_ids: excludedMenuIds } }, { headers });
 }
 
 function requireValidRole(role: string): StaffRole {
