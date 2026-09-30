@@ -128,10 +128,20 @@ async function run() {
     const TEST_TURNSTILE_SITE_KEY = '1x00000000000000000000AA';
     await page.route('**/js/config.js', async (route) => {
       const realConfig = await fs.readFile(path.join(lpRoot, 'js', 'config.js'), 'utf8');
-      const testConfig = realConfig.replace(
-        /TURNSTILE_SITE_KEY:\s*'[^']*'/,
-        `TURNSTILE_SITE_KEY: '${TEST_TURNSTILE_SITE_KEY}'`,
-      );
+      const testConfig = realConfig
+        .replace(
+          /TURNSTILE_SITE_KEY:\s*'[^']*'/,
+          `TURNSTILE_SITE_KEY: '${TEST_TURNSTILE_SITE_KEY}'`,
+        )
+        // RESERVATION_MAINTENANCEがtrueのままローカルに残っていると(本番pushの直前に
+        // trueへ戻す運用のため、確認後に戻し忘れなければ常にtrueのはず)、reserve.jsは
+        // ウィザードの代わりにメンテナンス案内を表示し、.option-card等のAPI呼び出しが
+        // 一切発生せずこのテストが必ずタイムアウトする(2026-09-30、実機で発生)。
+        // ローカルファイルの値に関わらず、テスト実行中は常にfalseへ強制する。
+        .replace(
+          /RESERVATION_MAINTENANCE:\s*(true|false)/,
+          'RESERVATION_MAINTENANCE: false',
+        );
       await route.fulfill({ contentType: 'application/javascript; charset=utf-8', body: testConfig });
     });
 
@@ -205,6 +215,114 @@ async function run() {
       console.log('SUPABASE_SERVICE_ROLE_KEY が未設定のため、スタッフ×メニューの対応可否のテストはスキップしました。');
     }
 
+    // 1.6. スタッフ取得の競合(初期表示時の古いGET /staff応答が、絞り込み後の表示を上書きしないこと)。
+    // 1.5とは独立させ、このブロックで使う変数(対象メニュー・対象スタッフ等)は自分で取得し直す
+    // (1.5のローカル変数には依存しない)。reserve.js(loadStaffList内のrequestVersionガード、
+    // コミット7e40fa4)の回帰テスト。
+    if (admin) {
+      console.log('1.6. スタッフ取得の競合(初期表示の古い応答が、絞り込み後の表示を上書きしないこと)を確認...');
+      const { data: raceMenu, error: raceMenuErr } = await admin
+        .from('menus').select('id, name').eq('name', 'カラー').eq('is_active', true).maybeSingle();
+      if (raceMenuErr || !raceMenu) throw new Error(`テスト用メニュー(カラー)の取得に失敗: ${raceMenuErr?.message}`);
+
+      const fetchFilteredStaff = (menuId) => page.evaluate(async (id) => {
+        const cfg = window.CITY_DOGS_CONFIG;
+        const res = await fetch(`${cfg.SUPABASE_URL}/functions/v1/staff?menu_ids=${id}`, {
+          headers: { Authorization: `Bearer ${cfg.ANON_KEY}` },
+        });
+        return (await res.json()).staff;
+      }, menuId);
+
+      const beforeRaceStaff = await fetchFilteredStaff(raceMenu.id);
+      if (beforeRaceStaff.length < 2) {
+        console.log(`   稼働中のスタイリストが${beforeRaceStaff.length}名のため、競合確認はスキップします(2名以上必要)。`);
+      } else {
+        const raceTargetStaff = beforeRaceStaff[0];
+        const { error: raceInsErr } = await admin
+          .from('staff_menu_exclusions').insert({ staff_id: raceTargetStaff.id, menu_id: raceMenu.id });
+        if (raceInsErr) throw new Error(`テスト用の除外登録に失敗: ${raceInsErr.message}`);
+
+        // GET /staff(menu_idsなし、初期表示時の無条件呼び出し)だけを意図的に保留する。
+        // URLパターン(glob)自体には絞り込みをさせず、ハンドラ内でメソッド・pathname・
+        // menu_idsの有無を明示的に判定し、対象外の通信はそのままcontinue()する。
+        let releaseHeldRequest;
+        const releaseGate = new Promise((resolve) => { releaseHeldRequest = resolve; });
+        let heldRequestSeen = false;
+        let filteredRequestSeen = false;
+        const routePattern = '**/functions/v1/staff*';
+        const routeHandler = async (route) => {
+          const request = route.request();
+          const url = new URL(request.url());
+          const isStaffEndpoint = request.method() === 'GET' && url.pathname === '/functions/v1/staff';
+          if (!isStaffEndpoint) {
+            await route.continue();
+            return;
+          }
+          if (url.searchParams.has('menu_ids')) {
+            filteredRequestSeen = true;
+            await route.continue();
+            return;
+          }
+          heldRequestSeen = true;
+          await releaseGate;
+          await route.continue();
+        };
+
+        try {
+          await page.route(routePattern, routeHandler);
+
+          // 初期表示時のloadStaffList()(menu_idsなし)を再発火させ、保留状態にする。
+          await page.reload();
+          await page.waitForSelector('.option-card', { timeout: 10000 });
+
+          const heldDeadline = Date.now() + 10000;
+          while (!heldRequestSeen && Date.now() < heldDeadline) {
+            await new Promise((r) => setTimeout(r, 100));
+          }
+          if (!heldRequestSeen) throw new Error('初期表示時のGET /staff(menu_idsなし)がインターセプトされませんでした。');
+
+          // メニュー(カラー)を選んで「次へ」を押し、絞り込み後のGET /staffを先に完了させる。
+          const raceMenuCard = page.locator('.option-card', { has: page.locator('h3', { hasText: /^カラー$/ }) });
+          await raceMenuCard.click();
+          await page.click('#toStep2');
+          // waitForFunction(fn, { timeout })の2引数形式は第2引数がargとして扱われ、指定した
+          // timeoutが適用されず既定の30000msになる(実機の挙動で確認済み、2026-09-30)。
+          await page.waitForFunction(() => document.querySelectorAll('#staffSelect option').length > 1, undefined, { timeout: 10000 });
+          if (!filteredRequestSeen) throw new Error('絞り込み後のGET /staff(menu_ids付き)がインターセプトされませんでした。');
+
+          // 保留していた古いGET /staffを今解放し、ブラウザが実際に受信するまで待つ。
+          releaseHeldRequest();
+          await page.waitForResponse((res) => {
+            const u = new URL(res.url());
+            return res.request().method() === 'GET' && u.pathname === '/functions/v1/staff' && !u.searchParams.has('menu_ids');
+          }, { timeout: 10000 });
+
+          // 解放後、対応不可スタッフの選択肢が(一瞬でも)再表示されないことを一定時間ポーリングで確認する。
+          // 実時間のsleepで「待てば直る」を確認するのではなく、応答順自体は上のroute制御で
+          // 確実に固定済みであり、ここは古い応答が処理された後のDOM状態を確認しているだけ。
+          const checkDeadline = Date.now() + 2000;
+          while (Date.now() < checkDeadline) {
+            const staleCount = await page.locator(`#staffSelect option[value="${raceTargetStaff.id}"]`).count();
+            if (staleCount !== 0) {
+              throw new Error(`古い(絞り込み前の)GET /staff応答により、対応不可スタッフ「${raceTargetStaff.name}」が選択肢に再表示されました。`);
+            }
+            await new Promise((r) => setTimeout(r, 100));
+          }
+          console.log(`   「${raceTargetStaff.name}」を除外した状態で、古いGET /staff応答が後から返っても選択肢を上書きしないことを確認しました。`);
+        } finally {
+          await page.unroute(routePattern, routeHandler);
+          const { error: raceDelErr } = await admin
+            .from('staff_menu_exclusions').delete().eq('staff_id', raceTargetStaff.id).eq('menu_id', raceMenu.id);
+          if (raceDelErr) throw new Error(`テスト用の除外設定の削除に失敗しました(手動確認が必要): ${raceDelErr.message}`);
+        }
+
+        // 以降のSTEP 1はメニュー未選択の状態から始まる前提のため、このブロックで選んだ
+        // 「カラー」・遷移した状態をリセットしておく。
+        await page.reload();
+        await page.waitForSelector('.option-card', { timeout: 10000 });
+      }
+    }
+
     // STEP 1: メニュー選択(複数選択: カット + 顔剃り。2026-09-24〜、カット/カラー/パーマ+オプションの組み合わせ選択)
     const card = (name) => page.locator('.option-card', { has: page.locator('h3', { hasText: new RegExp('^' + name + '$') }) });
     if (!(await page.locator('#toStep2').isDisabled())) throw new Error('メニュー未選択なのに「次へ」が押せる状態です。');
@@ -255,6 +373,11 @@ async function run() {
     console.log('指名したスタイリスト:', selectedStaffName);
 
     // 日時選択。休業日に当たる可能性があるので、空きが見つかるまで数日試す。
+    // 固定wait(1200ms)ではなく、loadAvailability()の「空き状況を確認しています…」表示が
+    // 消える(=fetchが完了しrenderSlots()が呼ばれた)までポーリングして待つ。固定waitだと、
+    // Edge Functionのコールドスタート等でそれより応答が遅れた場合に「空きなし」と誤判定し、
+    // 実際には空き枠があるのに7日間すべて空振りしてしまう(実機で発生: 2026-09-30。
+    // 直接GET /availabilityを叩くと同じ条件で正常に空き枠が返ることを確認して特定した)。
     let slotCount = 0;
     let triedDate = '';
     for (let offset = 1; offset <= 7 && slotCount === 0; offset++) {
@@ -262,7 +385,11 @@ async function run() {
       d.setDate(d.getDate() + offset);
       triedDate = formatDateLocal(d);
       await page.fill('#dateInput', triedDate);
-      await page.waitForTimeout(1200);
+      await page.waitForFunction(
+        () => !document.querySelector('#slotArea')?.textContent.includes('確認しています'),
+        undefined,
+        { timeout: 8000 },
+      );
       slotCount = await page.locator('.slot-btn').count();
     }
     await page.screenshot({ path: path.join(shotDir, '2-slots.png') });

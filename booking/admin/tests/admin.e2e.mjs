@@ -89,6 +89,9 @@ const TEST_FEATURE_TITLE = 'E2Eテスト特徴カード';
 const TEST_GALLERY_CAPTION = 'E2Eテスト写真(E2E)';
 const TEST_MENU_NAME = 'E2Eテストメニュー';
 const TEST_STAFF_BIO_NAME = 'E2Eテストスタッフ';
+// 「9.6 admin-site-content/staff.tsの原子更新」専用。9.5(実スタッフstaffRowを使う)とは別に、
+// この場限りの非稼働テストスタッフを使う(実スタッフ・実データには一切触れない)。
+const TEST_ATOMIC_STAFF_NAME = 'E2Eテスト用スタッフ(原子性検証・削除可)';
 
 // 電話予約の代理登録テスト用。顧客名で一目でテスト由来とわかるようにする。
 // 電話番号はcustomers.phoneがunique制約のため、再実行してもupsertで同じ顧客が再利用される想定。
@@ -225,6 +228,7 @@ async function cleanupTestContentRows(admin) {
   await admin.from('site_gallery_photos').delete().eq('caption', TEST_GALLERY_CAPTION);
   await admin.from('menus').delete().eq('name', TEST_MENU_NAME);
   await admin.from('staff').delete().eq('name', TEST_STAFF_BIO_NAME);
+  await admin.from('staff').delete().eq('name', TEST_ATOMIC_STAFF_NAME);
 }
 
 if (!SERVICE_ROLE_KEY) {
@@ -658,6 +662,72 @@ async function run() {
           await admin.from('staff_menu_exclusions').delete().eq('staff_id', staffRow.id).eq('menu_id', targetMenu.id);
           console.error('   ⚠️ 画面経由の後片付けが反映されていなかったため、直接DBから削除しました。');
         }
+      }
+    }
+
+    console.log('9.6. admin-site-content/staff.tsの原子更新(部分適用されないこと)を確認...');
+    {
+      // 9.5とは別に、この場限りの非稼働テストスタッフ(is_active: false)を使う。
+      // 実スタッフ(staffRow)・実メニューのstaff_menu_exclusionsには一切触れない。
+      // 起動時のcleanupTestContentRows()でも同名行を掃除しているが、念のためここでも掃除してから作成する。
+      await admin.from('staff').delete().eq('name', TEST_ATOMIC_STAFF_NAME);
+
+      const { data: activeMenu, error: activeMenuErr } = await admin
+        .from('menus').select('id').eq('is_active', true).limit(1).maybeSingle();
+      if (activeMenuErr || !activeMenu) throw new Error(`テスト用の実在メニュー取得に失敗: ${activeMenuErr?.message}`);
+
+      const { data: atomicStaff, error: atomicStaffErr } = await admin
+        .from('staff')
+        .insert({ name: TEST_ATOMIC_STAFF_NAME, role: 'stylist', is_active: false, display_order: 999 })
+        .select('id, name, bio_comment')
+        .single();
+      if (atomicStaffErr || !atomicStaff) throw new Error(`テスト用スタッフの作成に失敗: ${atomicStaffErr?.message}`);
+
+      try {
+        const { data: exclusionsBefore, error: exclusionsBeforeErr } = await admin
+          .from('staff_menu_exclusions').select('menu_id').eq('staff_id', atomicStaff.id);
+        if (exclusionsBeforeErr) throw new Error(`除外行の事前確認に失敗: ${exclusionsBeforeErr.message}`);
+        if (exclusionsBefore.length !== 0) throw new Error('作成直後のテストスタッフに除外行が既に存在しています(想定外)。');
+
+        const accessToken = await getAccessToken();
+        if (!accessToken) throw new Error('ログイン済みセッションのアクセストークンが取得できませんでした。');
+
+        // isValidUuid()は形式チェックのみで実在確認はしないため、形式上は正しいが存在しないUUIDを
+        // 混ぜることで、DB層(staff_menu_exclusions.menu_idの外部キー制約)まで実際に検証させる。
+        // PostgRESTの内部エラーコード(23503)には依存せず、公開APIのレスポンス(非2xx・INTERNAL_ERROR)と、
+        // 失敗後のDB実データ(staff本体・staff_menu_exclusionsが更新前のまま)だけをアサートする。
+        const NONEXISTENT_MENU_ID = '00000000-0000-4000-8000-000000000000';
+        const patchRes = await fetch(`${SUPABASE_URL}/functions/v1/admin-site-content/staff/${atomicStaff.id}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${accessToken}`, apikey: ANON_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bio_comment: 'この変更は反映されてはいけません(原子性検証用)',
+            excluded_menu_ids: [activeMenu.id, NONEXISTENT_MENU_ID],
+          }),
+        });
+        const patchBody = await patchRes.json().catch(() => null);
+        if (patchRes.ok || patchBody?.error?.code !== 'INTERNAL_ERROR') {
+          throw new Error(`存在しないmenu UUIDを含むPATCHが失敗しませんでした(status=${patchRes.status}, body=${JSON.stringify(patchBody)})。`);
+        }
+        console.log(`   PATCHが期待通り失敗(status=${patchRes.status}, code=${patchBody.error.code})`);
+
+        // 最重要: レスポンスの成否だけでなく、DBが実際に更新前の状態のまま(部分適用されていない)ことを確認する。
+        const { data: staffAfter, error: staffAfterErr } = await admin
+          .from('staff').select('bio_comment').eq('id', atomicStaff.id).single();
+        if (staffAfterErr) throw new Error(`失敗後のスタッフ確認に失敗: ${staffAfterErr.message}`);
+        if (staffAfter.bio_comment !== atomicStaff.bio_comment) {
+          throw new Error(`失敗したはずのPATCHで、staff本体(bio_comment)が更新されています: 更新前=${JSON.stringify(atomicStaff.bio_comment)}, 更新後=${JSON.stringify(staffAfter.bio_comment)}`);
+        }
+
+        const { data: exclusionsAfter, error: exclusionsAfterErr } = await admin
+          .from('staff_menu_exclusions').select('menu_id').eq('staff_id', atomicStaff.id);
+        if (exclusionsAfterErr) throw new Error(`失敗後の除外行確認に失敗: ${exclusionsAfterErr.message}`);
+        if (exclusionsAfter.length !== 0) {
+          throw new Error(`失敗したはずのPATCHで、staff_menu_exclusionsに行が作られています(部分適用): ${JSON.stringify(exclusionsAfter)}`);
+        }
+        console.log('   staff本体・staff_menu_exclusionsとも更新前の状態のまま(部分適用なし)であることをDBで確認');
+      } finally {
+        await admin.from('staff').delete().eq('id', atomicStaff.id);
       }
     }
 

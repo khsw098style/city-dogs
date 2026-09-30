@@ -226,11 +226,15 @@
   async function loadStaffList(menuIds) {
     const requestVersion = ++staffRequestVersion;
     ++availabilityRequestVersion;
-    const previousStaffId = state.selectedStaffId;
     try {
       const query = menuIds && menuIds.length > 0 ? `?menu_ids=${menuIds.join(',')}` : '';
       const data = await apiFetch(`/staff${query}`);
       if (requestVersion !== staffRequestVersion) return false;
+      // fetch開始時点ではなく、完了した「今」の選択状態を見る。開始時点のスナップショットを
+      // 使うと、fetch中(まだ絞り込み結果が返る前)にユーザーが担当を手動選択した場合、
+      // 「開始時点では未選択だった」という古い情報で上書きされ、選んだばかりの担当が
+      // 無条件で空にリセットされてしまう競合があった(実機のE2Eで発見: 2026-09-30)。
+      const previousStaffId = state.selectedStaffId;
       state.staffList = data.staff || [];
       if (state.staffList.length === 0) {
         el.staffSelect.innerHTML = '<option value="" disabled selected>選んだメニューに対応できるスタイリストがいません。お電話にてお問い合わせください。</option>';
