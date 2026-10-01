@@ -615,6 +615,9 @@ table.search-table tr:last-child td { border-bottom: none; }
   border: 1px dashed var(--border-strong);
   border-radius: 8px;
   padding: 1.1rem;
+  /* 2026-10-01: 新規登録欄を登録済み一覧の上に移動したのに合わせて、直後の一覧との間に
+     余白を確保する(無いと詰まって見える)。 */
+  margin-bottom: 1rem;
 }
 .content-add-form .field { margin-bottom: 0.7rem; }
 .content-add-form .field:last-of-type { margin-bottom: 0.9rem; }

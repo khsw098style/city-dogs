@@ -161,7 +161,7 @@
 
       <h2 class="content-heading" id="content-rating">評価バッジ(★スコア・口コミ件数)</h2>
       <p class="content-note">
-        LPヒーローの「★★★★★ 4.88(11件の口コミ)」表示用の数字です。API連携はしていないため、<a href="https://www.google.com/maps/search/?api=1&query=BARBER%20City%20Dogs&query_place_id=ChIJtQi3cGdt5TQRzXXkz1m8DWs" target="_blank" rel="noopener">Googleの口コミ(新しいタブで開きます)</a>を見ながら手動で更新してください。
+        LPヒーローの「★★★★★ (評価スコア)(口コミ件数の口コミ)」表示用の数字です。API連携はしていないため、<a href="https://www.google.com/maps/search/?api=1&query=BARBER%20City%20Dogs&query_place_id=ChIJtQi3cGdt5TQRzXXkz1m8DWs" target="_blank" rel="noopener">Googleの口コミ(新しいタブで開きます)</a>を見ながら手動で更新してください。
       </p>
       <form id="ratingForm" class="content-add-form">
         <span class="add-form-label">＋ 更新</span>
@@ -175,9 +175,6 @@
       <p class="content-note">
         LPの「CONCEPT」に並ぶ特徴カードです。<strong>推奨は3〜6枚</strong>です。PCでは3列で表示されるので、3枚か6枚がいちばんきれいに並びます。増やしすぎるとスマホでは縦に長くなり、いちばん伝えたい特徴が埋もれてしまいます。表示順の小さい順に並びます。
       </p>
-      <div id="featureCards" class="content-card-list">
-        <p class="status-text">読み込み中…</p>
-      </div>
       <details class="content-add-form" id="featureAddSection">
         <summary class="add-form-label">＋ 新規登録</summary>
         <form id="featureAddForm">
@@ -187,14 +184,14 @@
           <button type="submit" class="btn btn-ghost btn-small">特徴カードを追加</button>
         </form>
       </details>
+      <div id="featureCards" class="content-card-list">
+        <p class="status-text">読み込み中…</p>
+      </div>
 
       <h2 class="content-heading" id="content-gallery">SHOP &amp; STYLE(写真)</h2>
       <p class="content-note">
         「店内メイン写真」はLPに1枚だけ表示されます(表示順が最も小さい1枚)。「スタイル例」は<strong>推奨3〜6枚</strong>です。PCでは3列、タブレットでは2列、スマホでは1列に並ぶので、6枚がどの画面でもいちばんきれいです(4枚・5枚だと最後の行が余ります)。画像は1枚5MBまで(JPEG・PNG・WebP・GIF)です。
       </p>
-      <div id="galleryCards" class="content-card-list">
-        <p class="status-text">読み込み中…</p>
-      </div>
       <details class="content-add-form" id="galleryAddSection">
         <summary class="add-form-label">＋ 新規登録</summary>
         <form id="galleryAddForm" class="has-image">
@@ -215,6 +212,9 @@
           <div class="image-preview-box" id="galleryAddPreviewBox"><span class="no-image-text">画像未選択</span></div>
         </form>
       </details>
+      <div id="galleryCards" class="content-card-list">
+        <p class="status-text">読み込み中…</p>
+      </div>
 
       <h2 class="content-heading" id="content-menus">MENU &amp; PRICE(メニュー・料金)</h2>
       <p class="content-note">
@@ -225,9 +225,6 @@
         そこにオプション(顔剃り・眉毛整え等)や他の区分のメニューを追加できます。カットとカラーは各区分から1つまで、パーマ区分(パーマ・ツイスト)は併用できます。料金・所要時間は選んだメニューの単純合算です(セット割引はありません)。
         「〜」付き(下限価格)にチェックしたメニューを含む予約は、料金が「¥9,500〜」のように表示されます。
       </p>
-      <div id="menuCards" class="content-card-list">
-        <p class="status-text">読み込み中…</p>
-      </div>
       <details class="content-add-form" id="menuAddSection">
         <summary class="add-form-label">＋ 新規登録</summary>
         <form id="menuAddForm">
@@ -250,15 +247,15 @@
           <button type="submit" class="btn btn-ghost btn-small">メニューを追加</button>
         </form>
       </details>
+      <div id="menuCards" class="content-card-list">
+        <p class="status-text">読み込み中…</p>
+      </div>
 
       <h2 class="content-heading" id="content-staff">STAFF(スタッフ管理・紹介文)</h2>
       <p class="content-note">
         ここでスタッフを追加すると、稼働中(role=stylistかつ「稼働中」)であれば予約画面の指名リストにも自動的に反映されます。
         過去に予約で使われたことのあるスタッフは削除できません(削除ボタンを押すとエラーになります)。不要になった場合は「稼働中」のチェックを外してください。一度も予約に使われていないスタッフ(登録ミスなど)は削除できます。
       </p>
-      <div id="staffBioCards" class="content-card-list">
-        <p class="status-text">読み込み中…</p>
-      </div>
       <details class="content-add-form" id="staffAddSection">
         <summary class="add-form-label">＋ 新規登録</summary>
         <form id="staffAddForm">
@@ -274,6 +271,9 @@
           <button type="submit" class="btn btn-ghost btn-small">スタッフを追加</button>
         </form>
       </details>
+      <div id="staffBioCards" class="content-card-list">
+        <p class="status-text">読み込み中…</p>
+      </div>
     </section>
 
     <!-- 営業日・シフトタブ -->

@@ -5,7 +5,7 @@
 import { wireScheduleTab } from './schedule.js';
 import { wireReservationModals } from './reservationModal.js';
 import { initSearchTabOnce } from './search.js';
-import { wireContentTab, loadContentTabOnce } from './content.js';
+import { wireContentTab, loadContentTabOnce, refreshContentSubnavOnShow } from './content.js';
 import { initShiftsTabOnce } from './shifts.js';
 import { initCustomersTabOnce } from './customers.js';
 import { initRevenueTabOnce } from './revenue.js';
@@ -14,7 +14,13 @@ export function activateTab(tabKey) {
   document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('is-active', b.dataset.tab === tabKey));
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('is-active', p.dataset.tab === tabKey));
   if (tabKey === 'search') initSearchTabOnce();
-  if (tabKey === 'content') loadContentTabOnce();
+  if (tabKey === 'content') {
+    loadContentTabOnce();
+    // パネルがdisplay:noneの間に初期計算すると、見出しが全部top:0に見えて
+    // 最後の見出し(STAFF)が誤って選ばれてしまう(content.js参照)。表示に切り替わった
+    // 直後にここで再計算し、正しい先頭(評価バッジ)を現在地にする。
+    refreshContentSubnavOnShow();
+  }
   if (tabKey === 'shifts') initShiftsTabOnce();
   if (tabKey === 'customers') initCustomersTabOnce();
   if (tabKey === 'revenue') initRevenueTabOnce();

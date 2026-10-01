@@ -125,6 +125,9 @@ export function wireContentTab() {
 // 「サブナビの高さ分より上に来た見出しのうち、一番下にあるもの」を現在地とする定番のscrollspy方式
 // (IntersectionObserverの単純な出入り判定だと、末尾セクションがページ末尾に達した時に
 //  1つ前のセクションのハイライトが残ったままになる不具合が実機検証で見つかったため、この方式に変更した)。
+// タブ切り替え時(tabs.jsから)にも呼べるよう、モジュールスコープに保持する。
+let updateContentSubnavCurrent = null;
+
 function setupContentSubnav() {
   const subnavLinks = [...document.querySelectorAll('.content-subnav a')];
   const linkByHash = new Map(subnavLinks.map((a) => [a.getAttribute('href'), a]));
@@ -136,10 +139,26 @@ function setupContentSubnav() {
   const SUBNAV_PX = 72; // サブナビ(sticky)のおおよその高さ
 
   function updateCurrent() {
+    // このsetupContentSubnav()自体は初回ログイン時(wireContentTab())に1度だけ呼ばれるが、
+    // その時点ではLPコンテンツタブはまだ非表示(display:none)のことが多い。非表示要素は
+    // getBoundingClientRect()が常に{top:0,...}を返すため、下のループでは「全見出しが
+    // 閾値より上にある」ことになり、最後の見出し(STAFF)が問答無用で選ばれてしまっていた
+    // (2026-10-01、報告を受け修正)。パネルが実際に表示されていない間は計測せず、
+    // 先頭の見出しをそのまま現在地にする(タブを開いた時にtabs.js側から再実行される)。
+    const panel = document.querySelector('.tab-panel[data-tab="content"]');
+    if (!panel || panel.getClientRects().length === 0) {
+      subnavLinks.forEach((a) => a.classList.remove('is-current'));
+      linkByHash.get(`#${headings[0].id}`)?.classList.add('is-current');
+      return;
+    }
+
     // ページ最下部までスクロール済みの場合、最後のセクションの残りコンテンツが
     // ビューポートより短いと、そのセクションの見出しが物理的に閾値ラインまで
     // 届かないことがある(実機検証で発見)。その場合は問答無用で最後を現在地とする。
-    const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+    // ただし「そもそもまだスクロールできるほどの高さが無い」場合も同じ条件を満たしてしまうため、
+    // ページが実際にスクロール可能な高さを持っている場合だけこの「最下部」判定を使う。
+    const scrollable = document.documentElement.scrollHeight > window.innerHeight + 2;
+    const atBottom = scrollable && window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
     // 固定ヘッダー(.app-top)の下にサブナビが付くので、その分も含めた位置を基準にする。
     const appTopH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-top-h')) || 0;
     const thresholdPx = appTopH + SUBNAV_PX;
@@ -156,7 +175,14 @@ function setupContentSubnav() {
   }
 
   window.addEventListener('scroll', updateCurrent, { passive: true });
+  updateContentSubnavCurrent = updateCurrent;
   updateCurrent();
+}
+
+// LPコンテンツタブに切り替えた直後、パネルが表示されてから正しい位置で再計算する
+// (tabs.jsのactivateTab()から呼ぶ)。setupContentSubnav()がまだ実行されていなければ何もしない。
+export function refreshContentSubnavOnShow() {
+  updateContentSubnavCurrent?.();
 }
 
 let contentTabLoaded = false;
