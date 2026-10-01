@@ -6,16 +6,17 @@ import { isValidUuid } from "./validation.ts";
 // resolveMenuSelection()はSupabaseに依存しない純粋関数(単体テストは menuSelection.test.ts)。
 // ルールの意図・背景は migrations/0012 のコメント参照。
 
-export type MenuCategory = "cut" | "color" | "perm" | "option";
+export type MenuCategory = "cut" | "color" | "perm" | "option" | "limited";
 
 // 主メニュー(単独で予約可能)の区分。この並び順が、複数選択時の「主メニュー(reservations.menu_id)」の
-// 優先順位と、メニュー名を連結する時の表示順を兼ねる。
-const MAIN_CATEGORIES: MenuCategory[] = ["cut", "color", "perm"];
+// 優先順位と、メニュー名を連結する時の表示順を兼ねる。limited(期間限定メニュー)はcut/colorと
+// 同じ「単独1つまで」の主メニュー扱い(2026-10-01追加)。
+const MAIN_CATEGORIES: MenuCategory[] = ["cut", "limited", "color", "perm"];
 const CATEGORY_ORDER: MenuCategory[] = [...MAIN_CATEGORIES, "option"];
 
 // 同じ区分から1つしか選べない区分。パーマ区分(パーマ・ツイスト)は別メニューだが
 // ほぼ併用で注文されるため対象外(2026-09-25、店舗回答)で、複数選択できる。
-const SINGLE_SELECT_CATEGORIES: MenuCategory[] = ["cut", "color"];
+const SINGLE_SELECT_CATEGORIES: MenuCategory[] = ["cut", "color", "limited"];
 
 export interface MenuRow {
   id: string;
@@ -62,7 +63,7 @@ export function resolveMenuSelection(menus: MenuRow[], ids: string[]): MenuSelec
     }
   }
   if (!chosen.some((m) => MAIN_CATEGORIES.includes(m.category))) {
-    throw new ApiError("VALIDATION_ERROR", "カット・カラー・パーマのいずれかを選択してください(オプションのみのご予約はできません)。");
+    throw new ApiError("VALIDATION_ERROR", "カット・カラー・パーマ・期間限定メニューのいずれかを選択してください(オプションのみのご予約はできません)。");
   }
 
   const items = [...chosen].sort(
@@ -81,6 +82,7 @@ export function resolveMenuSelection(menus: MenuRow[], ids: string[]): MenuSelec
 
 const CATEGORY_LABEL: Record<MenuCategory, string> = {
   cut: "カット",
+  limited: "期間限定メニュー",
   color: "カラー",
   perm: "パーマ",
   option: "オプション",

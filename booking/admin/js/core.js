@@ -46,11 +46,12 @@ export const STATUS_TRANSITIONS = {
 export const REASON_REQUIRED_STATUSES = new Set(['declined', 'cancelled_by_salon', 'no_show']);
 
 // メニューの区分(menus.category)。選択ルールはサーバー側 _shared/menuSelection.ts が最終防御:
-// cut/colorは各区分から最大1つ、permはパーマ・ツイストを併用可(複数)、この3区分のどれか1つは必須、optionは追加専用で何個でも可。
-export const MAIN_MENU_CATEGORIES = ['cut', 'color', 'perm'];
-export const SINGLE_SELECT_MENU_CATEGORIES = ['cut', 'color'];
-export const MENU_CATEGORY_ORDER = ['cut', 'color', 'perm', 'option'];
-export const MENU_CATEGORY_LABELS = { cut: 'カット', color: 'カラー', perm: 'パーマ', option: 'オプション' };
+// cut/color/limitedは各区分から最大1つ、permはパーマ・ツイストを併用可(複数)、この4区分のどれか1つは必須、optionは追加専用で何個でも可。
+// limited(期間限定メニュー)はcut等と同じ主メニュー扱い(2026-10-01追加)。
+export const MAIN_MENU_CATEGORIES = ['cut', 'limited', 'color', 'perm'];
+export const SINGLE_SELECT_MENU_CATEGORIES = ['cut', 'color', 'limited'];
+export const MENU_CATEGORY_ORDER = ['cut', 'limited', 'color', 'perm', 'option'];
+export const MENU_CATEGORY_LABELS = { cut: 'カット', limited: '期間限定メニュー', color: 'カラー', perm: 'パーマ', option: 'オプション' };
 
 // 電話番号の自動ハイフン・バリデーションはLPの予約画面(lp/reserve.js)と完全に同一仕様にする
 // (2026-09-14に決定。携帯番号(090/080/070)限定で、固定電話からの代理予約登録はできない)。

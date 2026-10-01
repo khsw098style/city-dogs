@@ -39,7 +39,7 @@ insert into menus (name, category, price, price_is_from, duration_minutes, descr
 select v.name, v.category, v.price, v.price_is_from, v.duration_minutes, v.description, true, v.sort_order
 from (values
   ('カット', 'cut', 4000, false, 60, 'カット+シャンプー+ショートヘッドマッサージ+ヘアセット', 10),
-  ('フェード メンテナンスカット', 'cut', 3000, false, 60, 'カットした日から14日以内', 20),
+  ('メンテナンスカット', 'cut', 3000, false, 60, 'カットした日から14日以内', 20),
   ('高校生カット', 'cut', 2700, false, 60, null, 30),
   ('中学生以下カット', 'cut', 2200, true, 60, null, 40),
   ('カラー', 'color', 4500, true, 60, '白髪染め、おしゃれ染め、メッシュ。ブリーチの場合は要連絡。', 50),

@@ -66,11 +66,14 @@
   // メニューの区分(menus.category)。表示順と見出し。LPのメニュー表示(site-content.js)と同じ定義。
   // 選択ルール(サーバー側 _shared/menuSelection.ts が最終防御): cut/colorは各区分から最大1つ、permはパーマ・ツイストを
   // 併用できる(複数可)。cut/color/permのどれか1つは必須。optionは主メニューへの追加専用で何個でも選べる。
-  const CATEGORY_ORDER = ['cut', 'color', 'perm', 'option'];
-  const MAIN_CATEGORIES = new Set(['cut', 'color', 'perm']);
-  const SINGLE_SELECT_CATEGORIES = new Set(['cut', 'color']);
+  // limited(期間限定メニュー)はcut/colorと同じ「単独1つまで」の主メニュー扱い(2026-10-01追加)。
+  // 行が無い(=現在期間限定メニューが無い)場合は、他の区分と同じくこの見出し自体が表示されない。
+  const CATEGORY_ORDER = ['cut', 'limited', 'color', 'perm', 'option'];
+  const MAIN_CATEGORIES = new Set(['cut', 'limited', 'color', 'perm']);
+  const SINGLE_SELECT_CATEGORIES = new Set(['cut', 'color', 'limited']);
   const CATEGORY_META = {
     cut: { label: 'カット', hint: 'お一人につき1つお選びください' },
+    limited: { label: '期間限定メニュー', hint: 'お一人につき1つお選びください' },
     color: { label: 'カラー', hint: 'カットとの組み合わせも、カラーのみもOK' },
     perm: { label: 'パーマ', hint: 'パーマ・ツイストは、片方だけでも両方でもOK' },
     option: { label: 'オプション', hint: 'ご一緒にいかがですか?いくつでも追加できます' },

@@ -386,6 +386,7 @@ function menuCardHtml(m) {
         <label>区分</label>
         <select class="f-category">
           ${categoryOption('cut', 'カット(1予約で1つまで)')}
+          ${categoryOption('limited', '期間限定メニュー(1予約で1つまで)')}
           ${categoryOption('color', 'カラー(1予約で1つまで)')}
           ${categoryOption('perm', 'パーマ(併用可)')}
           ${categoryOption('option', 'オプション(追加専用)')}

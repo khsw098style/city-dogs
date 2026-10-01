@@ -34,7 +34,12 @@
 
 * { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+/* タブごとに内容の高さが違うと、縦スクロールバーの有無が切り替わり、その分(15px前後)
+   ページの横幅が変動して見える不具合があった(2026-10-01、顧客管理タブで発見。検索前/
+   該当なしの短い内容だとスクロールバーが消えて横に広がって見え、検索結果が表示されて
+   内容が長くなるとスクロールバーが戻って他のタブと揃って見えていた)。常にスクロールバー分の
+   余白を確保し、内容の長さに関わらず横幅を一定にする。 */
+html { scroll-behavior: smooth; overflow-y: scroll; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
 }
@@ -755,6 +760,10 @@ summary.add-form-label::before {
   padding-top: 0.8rem;
   border-top: 1px dashed var(--border-strong);
   font-size: 0.8rem;
+  /* th/tdがwhite-space:nowrapのため、カード幅より内容が広い場合に表全体がはみ出し、
+     ページ全体の横幅まで広がってしまっていた(2026-10-01、実機で発見)。
+     search.jsの.search-table-wrapと同じ考え方で、このカード内だけで横スクロールさせる。 */
+  overflow-x: auto;
 }
 .customer-history table { width: 100%; border-collapse: collapse; }
 .customer-history th, .customer-history td {

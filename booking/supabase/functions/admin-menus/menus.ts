@@ -15,12 +15,12 @@ interface MenuBody {
 
 const SELECT_COLUMNS = "id, name, price, price_is_from, duration_minutes, description, category, is_active, sort_order";
 
-// migrations/0012 のCHECK制約と一致させる。cut/color/perm=単独で予約可能な主メニュー、option=追加専用。
-const VALID_CATEGORIES = ["cut", "color", "perm", "option"];
+// migrations/0012・0017 のCHECK制約と一致させる。cut/color/perm/limited=単独で予約可能な主メニュー、option=追加専用。
+const VALID_CATEGORIES = ["cut", "color", "perm", "option", "limited"];
 
 function requireValidCategory(value: unknown): string {
   if (typeof value !== "string" || !VALID_CATEGORIES.includes(value)) {
-    throw new ApiError("VALIDATION_ERROR", "区分は cut / color / perm / option のいずれかを指定してください。");
+    throw new ApiError("VALIDATION_ERROR", "区分は cut / color / perm / option / limited のいずれかを指定してください。");
   }
   return value;
 }

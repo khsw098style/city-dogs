@@ -113,8 +113,11 @@ async function run() {
 
     const menuCount = await page.locator('#menuList .menu-item').count();
     if (menuCount !== 10) failures.push(`MENU & PRICE: 期待したメニュー数(10)と異なる: ${menuCount}`);
+    // カット・期間限定メニューは単独見出し、カラー/パーマ/オプションは1つの見出しにまとめて
+    // 表示する(2026-10-01〜、site-content.jsのMENU_SECTIONS参照)。期間限定メニューは現状
+    // 登録が無い(行が無ければ見出し自体が出ない)ため、通常は2見出しになる。
     const groupTitles = await page.locator('#menuList .menu-group-title').allTextContents();
-    if (groupTitles.join(',') !== 'カット,カラー,パーマ,オプション') failures.push(`MENU & PRICE: 区分の見出しが想定と異なる: ${groupTitles.join(',')}`);
+    if (groupTitles.join(',') !== 'カット,カラー・パーマ・オプション') failures.push(`MENU & PRICE: 区分の見出しが想定と異なる: ${groupTitles.join(',')}`);
     const firstMenuPrice = await page.locator('#menuList .menu-item-price').first().textContent();
     if (!firstMenuPrice.includes('4,000')) failures.push(`MENU & PRICE: 先頭メニューの価格が想定と異なる: ${firstMenuPrice}`);
 
