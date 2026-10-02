@@ -2,7 +2,7 @@
   'use strict';
 
   // Supabase Edge Functions(公開API)。publishable/anonキーはクライアントに埋め込む前提の鍵。
-  const { SUPABASE_URL, ANON_KEY } = window.CITY_DOGS_CONFIG;
+  const { SUPABASE_URL, ANON_KEY } = window.DEVELOPER_SALON_CONFIG;
   const API_BASE = `${SUPABASE_URL}/functions/v1`;
 
   const yenFmt = new Intl.NumberFormat('ja-JP');

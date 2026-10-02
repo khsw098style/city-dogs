@@ -2,7 +2,7 @@
   'use strict';
 
   // Supabase Edge Functions(公開API)。publishable/anonキーはクライアントに埋め込む前提の鍵。
-  const { SUPABASE_URL, ANON_KEY, TURNSTILE_SITE_KEY } = window.CITY_DOGS_CONFIG;
+  const { SUPABASE_URL, ANON_KEY, TURNSTILE_SITE_KEY } = window.DEVELOPER_SALON_CONFIG;
   const API_BASE = `${SUPABASE_URL}/functions/v1`;
 
   // 計画的なメンテナンス(DB移行作業など)でWEB予約を一時停止する時のフラグ。
@@ -11,7 +11,7 @@
   // (APIも呼ばない)。この判定はTurnstileのコールバック定義より前に置くこと
   // (#turnstileWidgetごとDOMから消すため、後にすると「コンテナが見つからない」という
   // Turnstile側のエラーが出る)。
-  if (window.CITY_DOGS_CONFIG.RESERVATION_MAINTENANCE) {
+  if (window.DEVELOPER_SALON_CONFIG.RESERVATION_MAINTENANCE) {
     window.onTurnstileLoad = () => {}; // ウィジェットは表示しないため何もしない
     const lead = document.querySelector('.reserve-lead');
     if (lead) lead.textContent = 'ただいまメンテナンス中のため、WEBでのご予約を一時的に停止しております。';

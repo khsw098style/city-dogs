@@ -3,10 +3,10 @@
 // 他のjs/*.jsファイルはここからimportして使う(admin.jsが分割されたうちの1つ、
 // 2026-09-29に機能ごとのファイルへ分割した際に切り出した)。
 
-export const { SUPABASE_URL, ANON_KEY } = window.CITY_DOGS_CONFIG;
+export const { SUPABASE_URL, ANON_KEY } = window.DEVELOPER_SALON_CONFIG;
 
 // 予約検索の1ページあたりの件数(config.jsのSEARCH_PAGE_SIZE。未指定・不正な値は30、APIの上限200まで)。
-export const SEARCH_PAGE_SIZE = Math.min(Math.max(Math.floor(Number(window.CITY_DOGS_CONFIG.SEARCH_PAGE_SIZE)) || 30, 1), 200);
+export const SEARCH_PAGE_SIZE = Math.min(Math.max(Math.floor(Number(window.DEVELOPER_SALON_CONFIG.SEARCH_PAGE_SIZE)) || 30, 1), 200);
 
 export const { createClient } = window.supabase;
 export const client = createClient(SUPABASE_URL, ANON_KEY);

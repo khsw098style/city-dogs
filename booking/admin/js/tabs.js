@@ -30,7 +30,7 @@ export function activateTab(tabKey) {
 // タブの中身(.tab-panel)は元々.is-activeでないと表示されないCSSなので、
 // activateTab()で選ばれない限り自然に非表示のままになる(パネル側は触らなくてよい)。
 function applyEnabledTabs() {
-  const enabledTabs = window.CITY_DOGS_CONFIG.ENABLED_TABS || {};
+  const enabledTabs = window.DEVELOPER_SALON_CONFIG.ENABLED_TABS || {};
   const tabBtns = Array.from(document.querySelectorAll('.tab-btn'));
   tabBtns.forEach((btn) => {
     btn.hidden = enabledTabs[btn.dataset.tab] === false;

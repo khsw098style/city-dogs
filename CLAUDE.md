@@ -6,13 +6,13 @@
 
 | 項目 | 内容 |
 |------|------|
-| プロジェクト名 | City Dogs(LP + 予約管理システム) |
+| プロジェクト名 | developerSalon(LP + 予約管理システムの店舗別テンプレート) |
 | 対象店舗 | BARBER City Dogs(沖縄県浦添市仲間、フェード専門バーバー) |
 | 構成 | LP(静的サイト)と予約管理システム(DB/バックエンド+予約管理画面)を1プロジェクトとして管理。デプロイ先は別々。**「予約管理画面」(`booking/admin/`)と「LPコンテンツ管理画面」は別物ではなく、前者に後者が「LPコンテンツ」タブとして統合されている** |
 | 対象ユーザー | 固定客 約500人、店舗スタッフ2〜3名(スタイリスト2名+アシスタント1名程度が上限の見込み)。同時アクセスは僅少 |
 | 背景 | HotPepper Beauty掲載料の負担が大きく、自社システムへの移行を検討中。移行期はHotPepperと並行運用する前提 |
-| リポジトリ | `https://github.com/khsw098style/city-dogs.git`(private) |
-| 本番URL | LP: `https://city-dogs.khs-w098style.workers.dev` / 管理画面: `https://city-dogs-admin-deploy.khs-w098style.workers.dev`(いずれもCloudflare Workers、独自ドメイン未確定の暫定URL) |
+| リポジトリ | 現在: `https://github.com/khsw098style/city-dogs.git` → 移行先: `https://github.com/khsw098style/developerSalon.git`(private) |
+| 本番URL | 現在: LP `https://city-dogs.khs-w098style.workers.dev` / 管理画面 `https://city-dogs-admin-deploy.khs-w098style.workers.dev` → 移行先: LP `https://developersalon.khs-w098style.workers.dev` / 管理画面 `https://developersalon-admin.khs-w098style.workers.dev`(Cloudflare Workers。移行が完了するまで現行URLを使用) |
 | Supabase | Organization: `khsw098style's Org`(Free) / Project: `city-dog-booking`(ref: `cwojmmrnhvemupxubtus`) / Region: Tokyo (ap-northeast-1)。このOrganizationは他案件とも共用する前提 |
 
 ## 役割
@@ -60,7 +60,7 @@
 ## ディレクトリ構成と役割
 
 ```
-city-dogs/
+developerSalon/
 ├── CLAUDE.md                    # プロジェクト概要・役割定義(このファイル)
 ├── CHANGELOG.md                 # 過去の実装経緯・トラブルシュート記録(自動読み込みされない)
 ├── TEMPLATE.md                  # 新規店舗展開時のチェックリスト
@@ -135,7 +135,7 @@ city-dogs/
 ### バックエンド単体テスト(Deno、Supabase接続不要)
 
 ```bash
-cd city-dogs/booking
+cd developerSalon/booking
 npm run test
 ```
 
@@ -144,7 +144,7 @@ npm run test
 ### 予約UI(顧客向け)
 
 ```bash
-cd city-dogs/lp
+cd developerSalon/lp
 npm install                      # 初回のみ
 npx playwright install chromium  # 初回のみ
 npm run test:e2e
@@ -155,7 +155,7 @@ npm run test:e2e
 ### 予約管理画面(スタッフ向け)
 
 ```bash
-cd city-dogs/booking/admin
+cd developerSalon/booking/admin
 npm install                      # 初回のみ
 npx playwright install chromium  # 初回のみ(lpで導入済みなら不要)
 SUPABASE_SERVICE_ROLE_KEY=<Project Settings > API のservice_roleキー> npm run test:e2e

@@ -2,7 +2,7 @@
 // 静的サーバーの起動〜Playwrightでの操作〜サーバー停止まで、これ1本で完結する。
 //
 // 実行方法:
-//   cd city-dogs/lp
+//   cd developerSalon/lp
 //   npm install        (初回のみ)
 //   npx playwright install chromium   (初回のみ)
 //   npm run test:e2e
@@ -151,7 +151,7 @@ async function run() {
 
     // スタッフ×メニューの対応可否(除外リスト方式、2026-09-30〜)。実際にデプロイ済みの
     // GET /staff(menu_idsフィルタ)・GET /availability(STAFF_MENU_MISMATCH)を、
-    // ブラウザの実際のfetch経由(window.CITY_DOGS_CONFIGの実キー)で確認する。
+    // ブラウザの実際のfetch経由(window.DEVELOPER_SALON_CONFIGの実キー)で確認する。
     // ウィザードの本流(メニュー選択→予約完了)とは独立させ、テスト用の除外設定は
     // 必ずfinallyで削除する(このデータは実在するスタッフ・メニューを一時的に操作するため)。
     if (admin) {
@@ -161,7 +161,7 @@ async function run() {
       if (colorMenuErr || !colorMenu) throw new Error(`テスト用メニュー(カラー)の取得に失敗: ${colorMenuErr?.message}`);
 
       const fetchStaffFor = (menuId) => page.evaluate(async (id) => {
-        const cfg = window.CITY_DOGS_CONFIG;
+        const cfg = window.DEVELOPER_SALON_CONFIG;
         const res = await fetch(`${cfg.SUPABASE_URL}/functions/v1/staff?menu_ids=${id}`, {
           headers: { Authorization: `Bearer ${cfg.ANON_KEY}` },
         });
@@ -190,7 +190,7 @@ async function run() {
           // エラーは記録から除外する。
           const errorsBeforeMismatchCheck = consoleErrors.length;
           const availResult = await page.evaluate(async ({ menuId, staffId }) => {
-            const cfg = window.CITY_DOGS_CONFIG;
+            const cfg = window.DEVELOPER_SALON_CONFIG;
             const d = new Date();
             d.setDate(d.getDate() + 3);
             const date = d.toISOString().slice(0, 10);
@@ -226,7 +226,7 @@ async function run() {
       if (raceMenuErr || !raceMenu) throw new Error(`テスト用メニュー(カラー)の取得に失敗: ${raceMenuErr?.message}`);
 
       const fetchFilteredStaff = (menuId) => page.evaluate(async (id) => {
-        const cfg = window.CITY_DOGS_CONFIG;
+        const cfg = window.DEVELOPER_SALON_CONFIG;
         const res = await fetch(`${cfg.SUPABASE_URL}/functions/v1/staff?menu_ids=${id}`, {
           headers: { Authorization: `Bearer ${cfg.ANON_KEY}` },
         });

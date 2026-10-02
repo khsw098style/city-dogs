@@ -17,7 +17,7 @@
 // 実行のたびに実行日+14日/+15日という相対日付を使うので、同日に複数回実行しない限り
 // 既存のテストデータと衝突しない。
 // 実行方法:
-//   cd city-dogs/booking/admin
+//   cd developerSalon/booking/admin
 //   npm install                      (初回のみ)
 //   npx playwright install chromium  (初回のみ)
 //   SUPABASE_SERVICE_ROLE_KEY=<service_roleキー> npm run test:e2e

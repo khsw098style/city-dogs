@@ -3,7 +3,7 @@
 // 正しく描画できているかを検証するE2Eテスト。サーバー起動〜終了まで自己完結する。
 //
 // 実行方法:
-//   cd city-dogs/lp
+//   cd developerSalon/lp
 //   npm install                      (初回のみ)
 //   npx playwright install chromium  (初回のみ)
 //   node tests/site-content.e2e.mjs
@@ -91,7 +91,7 @@ async function run() {
     // 決め打ちだったこの検証が壊れるという実害が出た)。評価バッジの検証と同じ考え方で、
     // 同じブラウザコンテキストから /site-content を直接叩いた結果と突き合わせる。
     const apiGallery = await page.evaluate(async () => {
-      const { SUPABASE_URL, ANON_KEY } = window.CITY_DOGS_CONFIG;
+      const { SUPABASE_URL, ANON_KEY } = window.DEVELOPER_SALON_CONFIG;
       const res = await fetch(`${SUPABASE_URL}/functions/v1/site-content`, {
         headers: { Authorization: `Bearer ${ANON_KEY}` },
       });
@@ -131,7 +131,7 @@ async function run() {
     // このファイルに決め打ちで書きたくないため、評価バッジ・ギャラリーと同じ考え方で
     // /site-content の実際の値と突き合わせる(名前が今後また変わっても壊れない)。
     const apiStaff = await page.evaluate(async () => {
-      const { SUPABASE_URL, ANON_KEY } = window.CITY_DOGS_CONFIG;
+      const { SUPABASE_URL, ANON_KEY } = window.DEVELOPER_SALON_CONFIG;
       const res = await fetch(`${SUPABASE_URL}/functions/v1/site-content`, {
         headers: { Authorization: `Bearer ${ANON_KEY}` },
       });
@@ -155,7 +155,7 @@ async function run() {
     // 決め打ちの期待値ではなく、同じブラウザコンテキストから /site-content を直接叩いた結果と
     // 突き合わせる方式で検証する(admin.e2e.mjs側の手動更新と値がズレても誤検知しないため)。
     const apiRating = await page.evaluate(async () => {
-      const { SUPABASE_URL, ANON_KEY } = window.CITY_DOGS_CONFIG;
+      const { SUPABASE_URL, ANON_KEY } = window.DEVELOPER_SALON_CONFIG;
       const res = await fetch(`${SUPABASE_URL}/functions/v1/site-content`, {
         headers: { Authorization: `Bearer ${ANON_KEY}` },
       });

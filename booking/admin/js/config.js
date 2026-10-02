@@ -3,12 +3,11 @@
 // 別の店舗向けにこのリポジトリを複製して使う場合、書き換えが必要なのはこのファイルだけ。
 // 手順は最上位の TEMPLATE.md を参照。
 // ANON_KEYはpublishable(anon)キーで、クライアントに埋め込む前提の公開鍵(秘匿情報ではない)。
-window.CITY_DOGS_CONFIG = {
+window.DEVELOPER_SALON_CONFIG = {
   SUPABASE_URL: 'https://cwojmmrnhvemupxubtus.supabase.co',
   ANON_KEY: 'sb_publishable_nYEHBjojuRPhIpjBPKG4NQ_nNfQVn7E',
   // Cloudflare Turnstileのサイトキー(公開情報、秘匿不要)。lp/js/config.jsと同じサイトを再利用。
-  // このドメイン(city-dogs-admin-deploy.khs-w098style.workers.dev)をCloudflareのHostname
-  // Managementに追加登録しないとウィジェットが表示されないので、本番反映時は要確認。
+  // 公開先のホスト名をCloudflare TurnstileのHostname Managementに追加登録する。
   TURNSTILE_SITE_KEY: '0x4AAAAAAE4sxhHQSTp5lim6',
   // 店舗によっては不要なタブがあるため(例: 顧客管理・売上予定実績を使わない店舗)、
   // 納品前にここでfalseにすればそのタブ自体を非表示にできる(オーナー自身は変更しない、

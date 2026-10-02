@@ -5,7 +5,7 @@ import { client, el, openModal, closeModal } from './core.js';
 import { initAppOnce } from './tabs.js';
 import { loadSchedule } from './schedule.js';
 
-const { TURNSTILE_SITE_KEY } = window.CITY_DOGS_CONFIG;
+const { TURNSTILE_SITE_KEY } = window.DEVELOPER_SALON_CONFIG;
 
 // Cloudflare Turnstile(ログイン総当たり対策)。lp/js/reserve.jsと同じ仕組み。
 // index.html側でrender=explicitを指定しており、スクリプト読み込み完了時にこの

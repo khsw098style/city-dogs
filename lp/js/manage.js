@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const { SUPABASE_URL, ANON_KEY } = window.CITY_DOGS_CONFIG;
+  const { SUPABASE_URL, ANON_KEY } = window.DEVELOPER_SALON_CONFIG;
   const API_BASE = `${SUPABASE_URL}/functions/v1`;
 
   const ACTIVE_STATUSES = ['tentative', 'confirmed', 'in_service', 'awaiting_checkout'];
