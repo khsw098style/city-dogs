@@ -11,8 +11,8 @@
 | 構成 | LP(静的サイト)と予約管理システム(DB/バックエンド+予約管理画面)を1プロジェクトとして管理。デプロイ先は別々。**「予約管理画面」(`booking/admin/`)と「LPコンテンツ管理画面」は別物ではなく、前者に後者が「LPコンテンツ」タブとして統合されている** |
 | 対象ユーザー | 固定客 約500人、店舗スタッフ2〜3名(スタイリスト2名+アシスタント1名程度が上限の見込み)。同時アクセスは僅少 |
 | 背景 | HotPepper Beauty掲載料の負担が大きく、自社システムへの移行を検討中。移行期はHotPepperと並行運用する前提 |
-| リポジトリ | 現在: `https://github.com/khsw098style/city-dogs.git` → 移行先: `https://github.com/khsw098style/developerSalon.git`(private) |
-| 本番URL | 現在: LP `https://city-dogs.khs-w098style.workers.dev` / 管理画面 `https://city-dogs-admin-deploy.khs-w098style.workers.dev` → 移行先: LP `https://developersalon.khs-w098style.workers.dev` / 管理画面 `https://developersalon-admin.khs-w098style.workers.dev`(Cloudflare Workers。移行が完了するまで現行URLを使用) |
+| リポジトリ | `https://github.com/khsw098style/developer-salon.git`(private) |
+| 本番URL | LP: `https://developer-salon.khs-w098style.workers.dev` / 管理画面: `https://developer-salon-admin.khs-w098style.workers.dev`(Cloudflare Workers) |
 | Supabase | Organization: `khsw098style's Org`(Free) / Project: `city-dog-booking`(ref: `cwojmmrnhvemupxubtus`) / Region: Tokyo (ap-northeast-1)。このOrganizationは他案件とも共用する前提 |
 
 ## 役割
